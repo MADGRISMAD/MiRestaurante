@@ -12,7 +12,7 @@
             <button type="button" :aria-pressed="view === 'plano'" @click="setView('plano')">Plano</button>
           </div>
           <button
-            v-if="view === 'plano' && mesas.length"
+            v-if="canManageFloor && view === 'plano' && mesas.length"
             type="button"
             class="btn btn-quiet edit-btn"
             :class="{ on: editMap }"
@@ -21,7 +21,7 @@
           >
             {{ editMap ? 'Listo' : 'Acomodar' }}
           </button>
-          <button type="button" class="btn btn-primary" aria-label="Agregar mesa" @click="mostrarModalAgregarMesa">
+          <button v-if="canManageFloor" type="button" class="btn btn-primary" aria-label="Agregar mesa" @click="mostrarModalAgregarMesa">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
             <span class="btn-label">Mesa</span>
           </button>
@@ -61,8 +61,11 @@
           <path d="M22 16h8M34 16h8M22 48h8M34 48h8" stroke-linecap="round" />
         </svg>
         <h2>Tu salón está vacío</h2>
-        <p>Agrega tus mesas y acomódalas en el plano como están en tu local.</p>
-        <button type="button" class="btn btn-primary" @click="mostrarModalAgregarMesa">Agregar mesa</button>
+        <template v-if="canManageFloor">
+          <p>Agrega tus mesas y acomódalas en el plano como están en tu local.</p>
+          <button type="button" class="btn btn-primary" @click="mostrarModalAgregarMesa">Agregar mesa</button>
+        </template>
+        <p v-else>Pide al administrador que agregue las mesas del local.</p>
       </div>
 
       <!-- Mesas (tarjetas) -->
@@ -252,10 +255,12 @@
                 </select>
                 <small v-if="waiterSaved" class="saved" role="status">Guardado</small>
               </label>
-              <button type="button" class="link-danger" :disabled="busy || selInfo.orders.length > 0" @click="eliminarMesa(sel)">
-                Eliminar mesa
-              </button>
-              <small v-if="selInfo.orders.length" class="hint">No se puede eliminar con una cuenta abierta.</small>
+              <template v-if="isAdmin">
+                <button type="button" class="link-danger" :disabled="busy || selInfo.orders.length > 0" @click="eliminarMesa(sel)">
+                  Eliminar mesa
+                </button>
+                <small v-if="selInfo.orders.length" class="hint">No se puede eliminar con una cuenta abierta.</small>
+              </template>
             </details>
           </div>
         </div>
@@ -366,6 +371,9 @@ const route = useRoute();
 const isWaiter = hasRole('waiter');
 const canOrder = canAccessRoute('menu');
 const canCharge = canAccessRoute('orders');
+// Lo mismo que permite el backend: crear y acomodar mesas (admin y hostess), eliminar (admin)
+const isAdmin = hasRole('admin');
+const canManageFloor = hasRole('admin', 'host');
 const seatForm = ref({ personas: 2, nombre: '', mesero: '' });
 const mapRef = ref(null);
 const scrollRef = ref(null);
@@ -569,6 +577,11 @@ function shortName(name) {
   const m = t.match(/(\d+)/);
   if (m) return m[1];
   return t.slice(0, 3).toUpperCase();
+}
+
+// Si el servidor niega la acción por rol, decirlo claro en vez de un error genérico
+function failText(e, fallback) {
+  return e?.response?.status === 403 ? 'Tu rol no tiene permiso para hacer esto.' : fallback;
 }
 
 function showToast(text, tone = 'ok') {
@@ -877,9 +890,9 @@ async function moveMesa(id, x, y) {
   try {
     const updated = await apiService.editTable(id, { posX: x, posY: y });
     mesas.value[idx] = { ...mesas.value[idx], ...updated };
-  } catch {
+  } catch (e) {
     mesas.value[idx] = prev;
-    showToast('No se pudo guardar la posición', 'error');
+    showToast(failText(e, 'No se pudo guardar la posición'), 'error');
   }
 }
 
@@ -923,8 +936,8 @@ async function agregarNuevaMesa() {
     mesas.value = [...mesas.value, response];
     showToast(`${response.nombre || 'Mesa'} creada`);
     cerrarModalAgregarMesa();
-  } catch {
-    showToast('No se pudo crear la mesa', 'error');
+  } catch (e) {
+    showToast(failText(e, 'No se pudo crear la mesa'), 'error');
   } finally {
     busy.value = false;
   }
@@ -939,8 +952,8 @@ async function eliminarMesa(mesa) {
     mesas.value = mesas.value.filter((m) => m.id !== mesa.id);
     showToast(`${mesa.nombre} eliminada`);
     cerrarMesa();
-  } catch {
-    showToast('No se pudo eliminar la mesa', 'error');
+  } catch (e) {
+    showToast(failText(e, 'No se pudo eliminar la mesa'), 'error');
   } finally {
     busy.value = false;
   }
@@ -953,8 +966,8 @@ async function updateSelected(patch) {
     const idx = mesas.value.findIndex((m) => m.id === sel.value.id);
     if (idx >= 0) mesas.value[idx] = { ...mesas.value[idx], ...updated };
     return true;
-  } catch {
-    showToast('No se pudo actualizar la mesa', 'error');
+  } catch (e) {
+    showToast(failText(e, 'No se pudo actualizar la mesa'), 'error');
     return false;
   } finally {
     busy.value = false;
@@ -994,8 +1007,8 @@ async function marcarServido() {
     const byId = new Map(updated.filter(Boolean).map((o) => [o.id, o]));
     orders.value = orders.value.map((o) => (byId.has(o.id) ? { ...o, ...byId.get(o.id) } : o));
     showToast('Marcado como servido');
-  } catch {
-    showToast('No se pudo actualizar el pedido', 'error');
+  } catch (e) {
+    showToast(failText(e, 'No se pudo actualizar el pedido'), 'error');
   } finally {
     busy.value = false;
   }
