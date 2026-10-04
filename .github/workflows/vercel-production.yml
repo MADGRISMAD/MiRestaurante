@@ -30,9 +30,27 @@ jobs:
       - name: Install Vercel CLI
         run: npm install -g vercel
 
-      # Crea el proyecto en Vercel la primera vez y lo enlaza
+      # Crea el proyecto "mirestaurante" la primera vez (o reusa el existente) y lo enlaza
+      # sin "vercel link", que falla con tokens limitados a un equipo.
       - name: Link Vercel project
-        run: vercel link --yes --project "$VERCEL_PROJECT" --scope "$VERCEL_SCOPE" --token="${{ secrets.VERCEL_TOKEN }}"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          api="https://api.vercel.com"
+          auth="Authorization: Bearer $VERCEL_TOKEN"
+          code=$(curl -sS -o project.json -w '%{http_code}' -H "$auth" "$api/v9/projects/$VERCEL_PROJECT?teamId=$VERCEL_SCOPE")
+          if [ "$code" = "404" ]; then
+            code=$(curl -sS -o project.json -w '%{http_code}' -X POST -H "$auth" -H 'Content-Type: application/json' \
+              -d "{\"name\":\"$VERCEL_PROJECT\"}" "$api/v10/projects?teamId=$VERCEL_SCOPE")
+          fi
+          if [ "$code" != "200" ] && [ "$code" != "201" ]; then
+            echo "Vercel API respondió $code:"; cat project.json; exit 1
+          fi
+          project_id=$(jq -r .id project.json)
+          rm project.json
+          mkdir -p .vercel
+          printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_SCOPE" "$project_id" > .vercel/project.json
+          echo "Proyecto $VERCEL_PROJECT → $project_id"
 
       - name: Deploy to production
         env:
@@ -40,7 +58,7 @@ jobs:
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
           APP_URL: ${{ vars.APP_URL || 'https://mirestaurante.vercel.app' }}
         run: |
-          vercel deploy --prod --yes --scope "$VERCEL_SCOPE" --token="${{ secrets.VERCEL_TOKEN }}" \
+          vercel deploy --prod --yes --token="${{ secrets.VERCEL_TOKEN }}" \
             -e DATABASE_URI="$DATABASE_URI" \
             -e DATABASE_NAME=mirestaurante \
             -e SECRET_KEY="$SECRET_KEY" \
