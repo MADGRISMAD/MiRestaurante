@@ -242,7 +242,7 @@ async function finish() {
 
 <style scoped>
 .setup-shell {
-  --primary: #1a4a38;
+  --primary: var(--mirestaurante-primary);
   --accent: #9a7b52;
   position: relative;
   min-height: 100vh;
@@ -411,7 +411,7 @@ async function finish() {
   padding: 0.9rem;
   margin-bottom: 1rem;
   border-radius: 0.75rem;
-  border: 2px solid var(--primary, #1a4a38);
+  border: 2px solid var(--primary);
   background: #fff;
 }
 

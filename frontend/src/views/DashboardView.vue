@@ -252,11 +252,11 @@ onMounted(async () => {
 .shortcuts a {
   padding: 0.75rem 0.85rem;
   border-radius: 0.75rem;
-  background: rgba(26, 74, 56, 0.05);
+  background: color-mix(in srgb, var(--mirestaurante-primary) 5%, transparent);
   transition: background 0.15s ease;
 }
 .shortcuts a:hover {
-  background: rgba(26, 74, 56, 0.1);
+  background: color-mix(in srgb, var(--mirestaurante-primary) 10%, transparent);
 }
 @media (max-width: 900px) {
   .lower {

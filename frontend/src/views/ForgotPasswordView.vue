@@ -69,8 +69,8 @@ async function submit() {
   inset: 0;
   background:
     radial-gradient(ellipse 70% 50% at 12% 18%, rgba(184, 149, 108, 0.32), transparent 55%),
-    radial-gradient(ellipse 55% 40% at 88% 78%, rgba(26, 74, 56, 0.45), transparent 50%),
-    linear-gradient(155deg, #0f241c 0%, #1a3f32 42%, #2a4d40 100%);
+    radial-gradient(ellipse 55% 40% at 88% 78%, rgba(208, 55, 31, 0.28), transparent 50%),
+    linear-gradient(155deg, #1c1a17 0%, #272420 45%, #2e2a25 100%);
 }
 .auth-panel {
   position: relative;
@@ -97,7 +97,7 @@ async function submit() {
   font-family: var(--font-display);
   font-size: 2.1rem;
   margin: 0;
-  color: var(--mirestaurante-primary, #1a4a38);
+  color: var(--mirestaurante-primary);
   font-weight: 800;
 }
 .brand-tagline {
@@ -140,7 +140,7 @@ async function submit() {
   border: none;
   border-radius: 0.7rem;
   padding: 0.8rem;
-  background: var(--mirestaurante-primary, #1a4a38);
+  background: var(--mirestaurante-primary);
   color: #f8f6f2;
   font: inherit;
   font-weight: 600;
@@ -168,7 +168,7 @@ async function submit() {
   display: block;
   text-align: center;
   margin-top: 0.75rem;
-  color: var(--mirestaurante-primary, #1a4a38);
+  color: var(--mirestaurante-primary);
   font-weight: 600;
   font-size: 0.9rem;
   text-decoration: none;

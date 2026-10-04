@@ -3,42 +3,42 @@
     <section class="floor" aria-labelledby="floor-title">
       <header class="floor-head">
         <div class="head-copy">
-          <h1 id="floor-title">Salón</h1>
+          <p class="kicker"><span class="pulse" aria-hidden="true"></span>Salón en vivo</p>
+          <h1 id="floor-title">Mesas</h1>
           <p class="stats" aria-live="polite">
-            <span class="stat"><i class="dot free" aria-hidden="true"></i><b>{{ stats.free }}</b> libres</span>
-            <span class="stat"><i class="dot busy" aria-hidden="true"></i><b>{{ stats.busy }}</b> ocupadas</span>
-            <span class="stat muted"><b>{{ stats.seated }}</b>/{{ stats.seats }} lugares en uso</span>
+            <span class="stat"><i class="lg free" aria-hidden="true"></i><b>{{ stats.free }}</b> libres</span>
+            <span class="stat"><i class="lg busy" aria-hidden="true"></i><b>{{ stats.busy }}</b> ocupadas</span>
+            <span class="stat muted"><b>{{ stats.seated }}</b> de {{ stats.seats }} lugares</span>
           </p>
         </div>
         <div class="head-actions">
+          <div class="seg" role="group" aria-label="Vista">
+            <button type="button" :aria-pressed="view === 'plano'" @click="setView('plano')">Plano</button>
+            <button type="button" :aria-pressed="view === 'lista'" @click="setView('lista')">Lista</button>
+          </div>
           <button
+            v-if="view === 'plano' && mesas.length"
             type="button"
             class="btn btn-quiet"
             :class="{ on: editMap }"
             :aria-pressed="editMap"
             @click="toggleEditMap"
           >
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-              <path v-if="!editMap" d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3" />
-              <path v-else d="M5 12.5l4.5 4.5L19 7.5" />
-            </svg>
-            {{ editMap ? 'Listo' : 'Editar plano' }}
+            {{ editMap ? 'Listo' : 'Editar' }}
           </button>
-          <button type="button" class="btn btn-primary" @click="mostrarModalAgregarMesa">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-            Mesa
+          <button type="button" class="btn btn-primary" aria-label="Agregar mesa" @click="mostrarModalAgregarMesa">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+            <span class="btn-label">Mesa</span>
           </button>
         </div>
       </header>
 
-      <p v-if="editMap" class="edit-hint" role="status">
-        Arrastra una mesa a su lugar, o selecciónala y usa las flechas del teclado. Los cambios se guardan solos.
+      <p v-if="editMap && view === 'plano'" class="edit-hint" role="status">
+        Arrastra cada mesa a su lugar (o usa las flechas del teclado). Se guarda solo.
       </p>
 
-      <div v-if="loading" class="floor-scroll">
-        <div class="floor-map skeleton" :style="mapStyle" aria-busy="true" aria-label="Cargando mesas">
-          <span v-for="i in 6" :key="i" class="sk-piece" :style="{ gridColumn: (i * 2) - 1, gridRow: (i % 3) * 2 + 2 }" />
-        </div>
+      <div v-if="loading" class="floor-map skeleton" :style="mapStyle" aria-busy="true" aria-label="Cargando mesas">
+        <span v-for="i in 6" :key="i" class="sk-piece" :style="{ gridColumn: (i * 2) - 1, gridRow: (i % 3) * 2 + 2 }" />
       </div>
 
       <div v-else-if="!mesas.length" class="empty">
@@ -51,57 +51,74 @@
         <button type="button" class="btn btn-primary" @click="mostrarModalAgregarMesa">Agregar mesa</button>
       </div>
 
-      <div v-else class="floor-scroll">
-        <div
-          ref="mapRef"
-          class="floor-map"
-          :class="{ editing: editMap }"
-          :style="mapStyle"
-          @pointermove="onPointerMove"
-          @pointerup="onPointerUp"
-          @pointercancel="onPointerUp"
-        >
-          <template v-if="editMap">
-            <div
-              v-for="cell in gridCells"
-              :key="`g-${cell.x}-${cell.y}`"
-              class="grid-cell"
-              :class="{ drop: dropTarget && dropTarget.x === cell.x && dropTarget.y === cell.y }"
-              :style="cellStyle(cell.x, cell.y)"
-            />
-          </template>
-
+      <ul v-else-if="view === 'lista'" class="table-list">
+        <li v-for="(mesa, i) in sortedMesas" :key="mesa.id" :style="{ '--i': i }">
           <button
-            v-for="(mesa, i) in mesas"
-            :key="mesa.id"
             type="button"
-            class="table-piece"
-            :class="[
-              mesa.disponible ? 'is-free' : 'is-busy',
-              shapeClass(mesa.capacidad),
-              { dragging: drag?.id === mesa.id, 'edit-mode': editMap },
-            ]"
-            :style="[pieceStyle(mesa), { '--i': i }]"
+            class="table-card"
+            :class="mesa.disponible ? 'is-free' : 'is-busy'"
             :aria-label="tableLabel(mesa)"
-            @pointerdown="onPointerDown($event, mesa)"
-            @click="onTableClick(mesa)"
-            @keydown="onTableKey($event, mesa)"
+            @click="abrirMesa(mesa)"
           >
-            <span class="table-unit" aria-hidden="true">
-              <span
-                v-for="n in seatCount(mesa.capacidad)"
-                :key="n"
-                class="chair"
-                :class="`c${n}`"
-              />
-              <span class="table-top">
-                <span class="table-name">{{ shortName(mesa.nombre) }}</span>
-                <span class="table-cap">{{ mesa.capacidad }} pers.</span>
-              </span>
-              <span v-if="waiterInitials(mesa)" class="waiter-tag">{{ waiterInitials(mesa) }}</span>
+            <span class="card-num">{{ shortName(mesa.nombre) }}</span>
+            <span class="card-body">
+              <span class="card-name">{{ mesa.nombre }}</span>
+              <span class="card-meta">{{ mesa.capacidad }} pers.<template v-if="waiterName(mesa)"> · {{ waiterName(mesa) }}</template></span>
             </span>
+            <span class="card-status">{{ mesa.disponible ? 'Libre' : 'Ocupada' }}</span>
           </button>
-        </div>
+        </li>
+      </ul>
+
+      <div
+        v-else
+        ref="mapRef"
+        class="floor-map"
+        :class="{ editing: editMap }"
+        :style="mapStyle"
+        @pointermove="onPointerMove"
+        @pointerup="onPointerUp"
+        @pointercancel="onPointerUp"
+      >
+        <template v-if="editMap">
+          <div
+            v-for="cell in gridCells"
+            :key="`g-${cell.x}-${cell.y}`"
+            class="grid-cell"
+            :class="{ drop: dropTarget && dropTarget.x === cell.x && dropTarget.y === cell.y }"
+            :style="cellStyle(cell.x, cell.y)"
+          />
+        </template>
+
+        <button
+          v-for="(mesa, i) in mesas"
+          :key="mesa.id"
+          type="button"
+          class="table-piece"
+          :class="[
+            mesa.disponible ? 'is-free' : 'is-busy',
+            shapeClass(mesa.capacidad),
+            { dragging: drag?.id === mesa.id, 'edit-mode': editMap },
+          ]"
+          :style="[pieceStyle(mesa), { '--i': i }]"
+          :aria-label="tableLabel(mesa)"
+          @pointerdown="onPointerDown($event, mesa)"
+          @click="onTableClick(mesa)"
+          @keydown="onTableKey($event, mesa)"
+        >
+          <span class="table-unit" aria-hidden="true">
+            <span
+              v-for="n in seatCount(mesa.capacidad)"
+              :key="n"
+              class="chair"
+              :class="`c${n}`"
+            />
+            <span class="table-top">
+              <span class="table-name">{{ shortName(mesa.nombre) }}</span>
+              <span v-if="waiterInitials(mesa)" class="table-waiter">{{ waiterInitials(mesa) }}</span>
+            </span>
+          </span>
+        </button>
       </div>
 
       <!-- Detalle de mesa -->
@@ -265,6 +282,9 @@ const mesaSeleccionada = ref(null);
 const selectedWaiterPhone = ref('');
 const waiterSaved = ref(false);
 const editMap = ref(false);
+const view = ref(
+  typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 'lista' : 'plano'
+);
 const drag = ref(null);
 const dropTarget = ref(null);
 const skipClick = ref(false);
@@ -301,7 +321,7 @@ const gridCells = computed(() => {
 
 const mapStyle = computed(() => ({
   gridTemplateColumns: `repeat(${COLS}, minmax(0, 1fr))`,
-  gridTemplateRows: `repeat(${ROWS}, minmax(3.4rem, 1fr))`,
+  gridTemplateRows: `repeat(${ROWS}, minmax(0, 1fr))`,
 }));
 
 const waiterByPhone = computed(() => {
@@ -318,6 +338,22 @@ function showToast(text, tone = 'ok') {
 
 function waiterPhone(mesa) {
   return typeof mesa.mesero === 'string' ? mesa.mesero : mesa.mesero?.cellphone || '';
+}
+
+const sortedMesas = computed(() =>
+  [...mesas.value].sort((a, b) =>
+    String(a.nombre).localeCompare(String(b.nombre), 'es', { numeric: true })
+  )
+);
+
+function setView(v) {
+  view.value = v;
+  if (v !== 'plano') toggleEditMap(false);
+}
+
+function waiterName(mesa) {
+  const w = waiterByPhone.value.get(String(waiterPhone(mesa)));
+  return w ? `${w.name} ${w.lastName || ''}`.trim() : '';
 }
 
 function waiterInitials(mesa) {
@@ -355,7 +391,7 @@ function shortName(name) {
   const t = String(name || '').trim();
   const m = t.match(/(\d+)/);
   if (m) return m[1];
-  return t.slice(0, 4).toUpperCase();
+  return t.slice(0, 3).toUpperCase();
 }
 
 function seatCount(cap) {
@@ -481,8 +517,8 @@ async function loadWaiters() {
   }
 }
 
-function toggleEditMap() {
-  editMap.value = !editMap.value;
+function toggleEditMap(force) {
+  editMap.value = typeof force === 'boolean' ? force : !editMap.value;
   drag.value = null;
   dropTarget.value = null;
 }
@@ -703,22 +739,21 @@ onUnmounted(() => {
 .floor {
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
-  --free: var(--mirestaurante-free);
-  --busy: var(--mirestaurante-busy);
-  --floor-bg: #e6dccb;
-  --floor-bg-2: #dccfb9;
-  --floor-line: rgba(92, 72, 44, 0.08);
-  --floor-edge: rgba(92, 72, 44, 0.18);
-  --chair: #5a4b3a;
-  max-width: 1200px;
+  /* Identidad de la landing */
+  --paper: #f4efe6;
+  --board: #1c1a17;
+  --board-2: #272420;
+  --tomato: #d0371f;
+  --amber: #e8a020;
+  --basil: #2f8f4e;
+  --basil-l: #4cc274;
+  --display: "Bricolage Grotesque", var(--font-sans);
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+  --free: var(--basil-l);
+  --busy: var(--tomato);
+  /* El plano (3:2) cabe en la pantalla sin quedar bajo el dock */
+  max-width: min(1200px, max(36rem, calc((100dvh - 19rem) * 1.5)));
   margin: 0 auto;
-}
-:global(html[data-theme="dark"]) .floor {
-  --floor-bg: #1c2420;
-  --floor-bg-2: #171e1a;
-  --floor-line: rgba(238, 242, 239, 0.05);
-  --floor-edge: rgba(238, 242, 239, 0.1);
-  --chair: #3b4842;
 }
 
 /* —— Cabecera —— */
@@ -726,48 +761,87 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
-  gap: 1rem;
+  gap: 0.9rem 1rem;
   flex-wrap: wrap;
   margin-bottom: 1rem;
 }
+.kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.35rem;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--mirestaurante-muted);
+}
+.pulse { position: relative; width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--basil-l); }
+.pulse::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: inherit; animation: ping 1.8s var(--ease-out) infinite; }
+@keyframes ping { to { transform: scale(2.6); opacity: 0; } }
 .floor-head h1 {
   margin: 0;
-  font-family: "Bricolage Grotesque", var(--font-display);
-  font-size: clamp(1.6rem, 1.2rem + 1.4vw, 2.1rem);
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  line-height: 1.05;
+  font-family: var(--display);
+  font-size: clamp(2rem, 1.4rem + 2vw, 2.8rem);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 0.98;
 }
 .stats {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem 1rem;
-  margin: 0.4rem 0 0;
-  font-size: 0.92rem;
-  color: var(--mirestaurante-ink);
+  gap: 0.3rem 1rem;
+  margin: 0.55rem 0 0;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--mirestaurante-muted);
 }
-.stat { display: inline-flex; align-items: center; gap: 0.4rem; }
-.stat b { font-weight: 700; font-variant-numeric: tabular-nums; }
-.stat.muted { color: var(--mirestaurante-muted); }
-.stat.muted b { color: var(--mirestaurante-ink); font-weight: 600; }
-.dot { width: 0.55rem; height: 0.55rem; border-radius: 50%; display: inline-block; }
-.dot.free { background: var(--free); }
-.dot.busy { background: var(--busy); }
+.stat { display: inline-flex; align-items: center; gap: 0.35rem; }
+.stat b { color: var(--mirestaurante-ink); font-weight: 700; font-variant-numeric: tabular-nums; }
+.lg { width: 0.6rem; height: 0.6rem; border-radius: 0.2rem; display: inline-block; }
+.lg.free { border: 1.5px dashed color-mix(in srgb, var(--mirestaurante-ink) 45%, transparent); }
+.lg.busy { background: var(--busy); }
 
-.head-actions { display: flex; gap: 0.5rem; }
+.head-actions { display: flex; gap: 0.5rem; align-items: center; }
+
+.seg {
+  display: inline-flex;
+  padding: 0.2rem;
+  border-radius: 0.8rem;
+  background: color-mix(in srgb, var(--mirestaurante-ink) 6%, transparent);
+}
+.seg button {
+  min-height: 2.5rem;
+  padding: 0 0.85rem;
+  border: none;
+  border-radius: 0.6rem;
+  background: transparent;
+  color: var(--mirestaurante-muted);
+  font-weight: 600;
+  font-size: 0.92rem;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+.seg button[aria-pressed="true"] {
+  background: var(--mirestaurante-panel-elevated);
+  color: var(--mirestaurante-ink);
+  box-shadow: 0 1px 2px rgba(18, 24, 22, 0.08), 0 2px 6px rgba(18, 24, 22, 0.06);
+}
+.seg button:focus-visible { outline: 2px solid var(--mirestaurante-primary); outline-offset: 1px; }
 
 /* —— Botones —— */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.45rem;
+  gap: 0.4rem;
   min-height: 2.9rem;
-  padding: 0 1.05rem;
+  padding: 0 1rem;
   border: 1px solid transparent;
   border-radius: 0.8rem;
   font-weight: 600;
-  font-size: 0.98rem;
+  font-size: 0.96rem;
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
@@ -779,18 +853,20 @@ onUnmounted(() => {
 .btn:focus-visible,
 .icon-close:focus-visible,
 .link-danger:focus-visible,
+.table-card:focus-visible,
 .table-piece:focus-visible .table-top,
 .cap-opt:focus-within {
   outline: 2px solid var(--mirestaurante-primary);
   outline-offset: 3px;
 }
 .btn-primary {
-  background: var(--mirestaurante-primary);
-  color: var(--mirestaurante-on-primary);
-  box-shadow: 0 6px 16px -6px color-mix(in srgb, var(--mirestaurante-primary) 70%, transparent);
+  background: var(--tomato);
+  color: #fff;
+  font-weight: 700;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.25) inset, 0 6px 18px -6px rgba(208, 55, 31, 0.6);
 }
 .btn-quiet {
-  background: var(--mirestaurante-panel);
+  background: transparent;
   color: var(--mirestaurante-ink);
   border-color: var(--mirestaurante-line);
 }
@@ -806,13 +882,14 @@ onUnmounted(() => {
 }
 .btn-lg { min-height: 3.35rem; font-size: 1.05rem; width: 100%; }
 @media (hover: hover) and (pointer: fine) {
-  .btn-primary:hover:not(:disabled) { background: color-mix(in srgb, var(--mirestaurante-primary) 88%, #000); }
-  .btn-quiet:hover:not(.on), .btn-soft:hover:not(:disabled) { background: color-mix(in srgb, var(--mirestaurante-surface) 70%, var(--mirestaurante-line)); }
+  .btn-primary:hover:not(:disabled) { background: #bb2f19; }
+  .btn-quiet:hover:not(.on), .btn-soft:hover:not(:disabled) { background: color-mix(in srgb, var(--mirestaurante-ink) 5%, transparent); }
+  .seg button:hover:not([aria-pressed="true"]) { color: var(--mirestaurante-ink); }
 }
 
 .edit-hint {
   margin: 0 0 0.75rem;
-  padding: 0.65rem 0.9rem;
+  padding: 0.6rem 0.85rem;
   border-radius: 0.7rem;
   background: var(--mirestaurante-primary-soft);
   color: var(--mirestaurante-ink);
@@ -820,50 +897,101 @@ onUnmounted(() => {
   text-wrap: pretty;
 }
 
-/* —— Plano —— */
-.floor-scroll {
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  border-radius: 1.1rem;
-  -webkit-overflow-scrolling: touch;
+/* —— Lista —— */
+.table-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 0.6rem;
 }
+.table-list li { animation: piece-in 280ms var(--ease-out) backwards; animation-delay: calc(min(var(--i, 0), 12) * 25ms); }
+.table-card {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.75rem 0.9rem 0.75rem 0.75rem;
+  border: 1.5px solid var(--mirestaurante-line);
+  border-radius: 1rem;
+  background: var(--mirestaurante-panel);
+  color: var(--mirestaurante-ink);
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  transition: transform 140ms var(--ease-out), border-color 160ms ease;
+}
+.table-card:active { transform: scale(0.98); }
+@media (hover: hover) and (pointer: fine) {
+  .table-card:hover { border-color: color-mix(in srgb, var(--mirestaurante-ink) 22%, transparent); }
+}
+.card-num {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.75rem;
+  font-family: var(--mono);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.is-free .card-num { border: 1.5px dashed color-mix(in srgb, var(--mirestaurante-ink) 35%, transparent); color: var(--mirestaurante-muted); }
+.is-busy .card-num { background: var(--busy); color: #fff; }
+.card-body { flex: 1; min-width: 0; display: grid; gap: 0.1rem; }
+.card-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-meta { font-size: 0.85rem; color: var(--mirestaurante-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-status {
+  padding: 0.15rem 0.45rem;
+  border-radius: 0.3rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.is-free .card-status { color: var(--mirestaurante-muted); border: 1.5px dashed var(--mirestaurante-line); }
+.is-busy .card-status { background: var(--tomato); color: #fff; }
+
+/* —— Plano ——
+   Todo se mide en cqw (ancho del plano) para que las mesas llenen la celda
+   en cualquier pantalla. Una celda = 100cqw / 12. */
 .floor-map {
+  --cell: calc(100cqw / 12);
+  container-type: inline-size;
   position: relative;
   display: grid;
-  min-width: 46rem;
-  min-height: min(68dvh, 34rem);
-  padding: 0.25rem;
-  background:
-    radial-gradient(120% 90% at 15% 0%, color-mix(in srgb, #fff 18%, transparent), transparent 60%),
-    repeating-linear-gradient(90deg, transparent 0 47px, var(--floor-line) 47px 48px),
-    linear-gradient(180deg, var(--floor-bg) 0%, var(--floor-bg-2) 100%);
-  border: 1px solid var(--floor-edge);
-  border-radius: 1.1rem;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), inset 0 -24px 48px -32px rgba(60, 40, 15, 0.25);
-  transition: box-shadow 200ms ease;
-}
-:global(html[data-theme="dark"]) .floor-map {
-  background:
-    repeating-linear-gradient(90deg, transparent 0 47px, var(--floor-line) 47px 48px),
-    linear-gradient(180deg, var(--floor-bg) 0%, var(--floor-bg-2) 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  background-color: var(--board);
+  background-image: radial-gradient(circle, rgba(244, 239, 230, 0.09) 1.2px, transparent 1.6px);
+  background-size: calc(100% / 12) calc(100% / 8);
+  background-position: calc(100% / 24) calc(100% / 16);
+  border-radius: 1.4rem;
+  box-shadow: 0 30px 60px -30px rgba(27, 24, 20, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+  user-select: none;
+  -webkit-user-select: none;
 }
 .floor-map.editing {
   touch-action: none;
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--mirestaurante-primary) 60%, transparent);
+  box-shadow: 0 0 0 2px var(--amber), 0 30px 60px -30px rgba(27, 24, 20, 0.6);
+}
+@container (max-width: 40rem) {
+  .table-waiter { display: none; }
 }
 
 .grid-cell {
   pointer-events: none;
-  min-height: 3.4rem;
   margin: 2px;
-  border-radius: 0.5rem;
-  border: 1px dashed color-mix(in srgb, var(--floor-edge) 90%, transparent);
-  transition: background-color 120ms ease, border-color 120ms ease;
+  border-radius: 0.4rem;
+  transition: background-color 120ms ease;
 }
 .grid-cell.drop {
-  background: color-mix(in srgb, var(--mirestaurante-primary) 18%, transparent);
-  border: 1px solid color-mix(in srgb, var(--mirestaurante-primary) 55%, transparent);
+  background: color-mix(in srgb, var(--amber) 18%, transparent);
+  box-shadow: inset 0 0 0 1.5px var(--amber);
 }
 
 /* —— Mesa —— */
@@ -878,8 +1006,6 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  user-select: none;
-  -webkit-user-select: none;
   -webkit-touch-callout: none;
   touch-action: manipulation;
   z-index: 2;
@@ -888,153 +1014,139 @@ onUnmounted(() => {
   animation-delay: calc(min(var(--i, 0), 12) * 30ms);
 }
 @keyframes piece-in {
-  from { opacity: 0; transform: translateY(6px) scale(0.96); }
+  from { opacity: 0; transform: translateY(6px) scale(0.97); }
 }
 .table-piece.edit-mode { cursor: grab; touch-action: none; }
 .table-piece.dragging { cursor: grabbing; z-index: 30; }
 
 .table-unit {
   position: relative;
-  width: 4.5rem;
-  height: 4.5rem;
+  width: calc(var(--cell) * 0.86);
+  height: calc(var(--cell) * 0.86);
   flex-shrink: 0;
   transition: transform 160ms var(--ease-out), filter 160ms ease;
 }
 .table-piece:active:not(.edit-mode) .table-unit { transform: scale(0.95); }
 .table-piece.dragging .table-unit {
-  transform: scale(1.06);
-  filter: drop-shadow(0 14px 18px rgba(30, 20, 8, 0.3));
+  transform: scale(1.05);
+  filter: drop-shadow(0 12px 16px rgba(30, 20, 8, 0.25));
 }
 @media (hover: hover) and (pointer: fine) {
-  .table-piece:hover .table-unit { transform: translateY(-2px); }
+  .is-free:hover .table-top { border-color: rgba(244, 239, 230, 0.6); color: var(--paper); }
+  .is-busy:hover .table-top { background: #e0452c; }
 }
 
 .chair {
+  --cw: calc(var(--cell) * 0.17);
+  --ch: calc(var(--cell) * 0.1);
   position: absolute;
-  width: 0.85rem;
-  height: 0.55rem;
-  border-radius: 0.22rem;
-  background: var(--chair);
+  width: var(--cw);
+  height: var(--ch);
+  border-radius: 999px;
+  background: rgba(244, 239, 230, 0.16);
   pointer-events: none;
   z-index: 0;
-  transition: background-color 200ms ease;
 }
-.is-busy .chair { background: color-mix(in srgb, var(--busy) 55%, var(--chair)); }
 
 .table-top {
   position: absolute;
-  inset: 18%;
+  inset: 16%;
   z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.1rem;
-  border-radius: 0.6rem;
-  transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease;
+  gap: 0.15em;
+  border-radius: calc(var(--cell) * 0.12);
+  font-size: calc(var(--cell) * 0.24);
+  transition: background-color 200ms ease, color 200ms ease, box-shadow 160ms ease;
 }
 .is-free .table-top {
-  background: var(--mirestaurante-panel-elevated);
-  color: var(--mirestaurante-ink);
-  border: 2px solid color-mix(in srgb, var(--free) 70%, transparent);
-  box-shadow: 0 4px 10px -2px rgba(40, 28, 12, 0.18);
+  background: rgba(244, 239, 230, 0.03);
+  color: rgba(244, 239, 230, 0.6);
+  border: 1.5px dashed rgba(244, 239, 230, 0.3);
 }
 .is-busy .table-top {
-  background: var(--busy);
+  background: var(--tomato);
   color: #fff;
-  border: 2px solid color-mix(in srgb, var(--busy) 70%, #000);
-  box-shadow: 0 6px 14px -4px color-mix(in srgb, var(--busy) 60%, transparent);
+  border: 1.5px solid var(--tomato);
+  box-shadow: 0 6px 18px -6px rgba(208, 55, 31, 0.7);
 }
+.is-busy .chair { background: rgba(244, 239, 230, 0.32); }
 
 .table-name {
-  font-family: "Bricolage Grotesque", var(--font-display);
-  font-size: 1.15rem;
+  font-family: var(--mono);
+  font-size: 0.9em;
   font-weight: 700;
   line-height: 1;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-}
-.table-cap {
-  font-size: 0.62rem;
-  font-weight: 600;
-  opacity: 0.75;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: clip;
   white-space: nowrap;
 }
-.shape-2 .table-cap { display: none; }
-
-.waiter-tag {
-  position: absolute;
-  top: 6%;
-  right: 6%;
-  z-index: 2;
-  min-width: 1.35rem;
-  height: 1.35rem;
-  padding: 0 0.25rem;
-  border-radius: 0.4rem;
-  display: grid;
-  place-items: center;
-  font-size: 0.6rem;
+.table-waiter {
+  font-family: var(--mono);
+  font-size: 0.42em;
   font-weight: 700;
-  letter-spacing: 0.02em;
-  background: var(--mirestaurante-ink);
-  color: var(--mirestaurante-panel);
-  box-shadow: 0 0 0 2px var(--floor-bg);
+  letter-spacing: 0.04em;
+  line-height: 1;
+  opacity: 0.7;
 }
+.shape-2 .table-waiter { display: none; }
 
 /* —— 2 personas: redonda —— */
-.shape-2 .table-unit { width: 3.6rem; height: 3.6rem; }
-.shape-2 .table-top { inset: 22%; border-radius: 999px; }
-.shape-2 .chair { width: 0.7rem; height: 0.48rem; }
-.shape-2 .c1 { left: 50%; top: 2%; transform: translateX(-50%); }
-.shape-2 .c2 { left: 50%; bottom: 2%; transform: translateX(-50%); }
-.shape-2 .waiter-tag { top: -2%; right: -6%; }
+.shape-2 .table-unit { width: calc(var(--cell) * 0.78); height: calc(var(--cell) * 0.78); }
+.shape-2 .table-top { inset: 20%; border-radius: 999px; font-size: calc(var(--cell) * 0.2); }
+.shape-2 .c1 { left: 50%; top: 4%; transform: translateX(-50%); }
+.shape-2 .c2 { left: 50%; bottom: 4%; transform: translateX(-50%); }
 
 /* —— 4 personas: cuadrada —— */
-.shape-4 .table-unit { width: 4.2rem; height: 4.2rem; }
-.shape-4 .table-top { inset: 20%; border-radius: 0.55rem; }
-.shape-4 .c1 { left: 50%; top: 2%; transform: translateX(-50%); }
-.shape-4 .c2 { right: 2%; top: 50%; transform: translateY(-50%) rotate(90deg); }
-.shape-4 .c3 { left: 50%; bottom: 2%; transform: translateX(-50%); }
-.shape-4 .c4 { left: 2%; top: 50%; transform: translateY(-50%) rotate(90deg); }
-.shape-4 .waiter-tag { top: 0; right: 0; }
+.shape-4 .c1 { left: 50%; top: 4%; transform: translateX(-50%); }
+.shape-4 .c2 { right: 4%; top: 50%; width: var(--ch); height: var(--cw); transform: translateY(-50%); }
+.shape-4 .c3 { left: 50%; bottom: 4%; transform: translateX(-50%); }
+.shape-4 .c4 { left: 4%; top: 50%; width: var(--ch); height: var(--cw); transform: translateY(-50%); }
 
 /* —— 6 personas: rectangular —— */
-.shape-6 .table-unit { width: 7.2rem; height: 4rem; }
-.shape-6 .table-top { inset: 20% 12%; border-radius: 0.7rem; }
-.shape-6 .c1 { left: 28%; top: 2%; transform: translateX(-50%); }
-.shape-6 .c2 { left: 50%; top: 2%; transform: translateX(-50%); }
-.shape-6 .c3 { left: 72%; top: 2%; transform: translateX(-50%); }
-.shape-6 .c4 { left: 28%; bottom: 2%; transform: translateX(-50%); }
-.shape-6 .c5 { left: 50%; bottom: 2%; transform: translateX(-50%); }
-.shape-6 .c6 { left: 72%; bottom: 2%; transform: translateX(-50%); }
+.shape-6 .table-unit { width: calc(var(--cell) * 1.86); }
+.shape-6 .table-top { inset: 16% 6%; }
+.shape-6 .c1 { left: 25%; top: 4%; transform: translateX(-50%); }
+.shape-6 .c2 { left: 50%; top: 4%; transform: translateX(-50%); }
+.shape-6 .c3 { left: 75%; top: 4%; transform: translateX(-50%); }
+.shape-6 .c4 { left: 25%; bottom: 4%; transform: translateX(-50%); }
+.shape-6 .c5 { left: 50%; bottom: 4%; transform: translateX(-50%); }
+.shape-6 .c6 { left: 75%; bottom: 4%; transform: translateX(-50%); }
 
 /* —— 8 personas: mesa grande —— */
-.shape-8 .table-unit { width: 6.6rem; height: 6.6rem; }
-.shape-8 .table-top { inset: 18%; border-radius: 0.65rem; }
-.shape-8 .c1 { left: 32%; top: 2%; transform: translateX(-50%); }
-.shape-8 .c2 { left: 68%; top: 2%; transform: translateX(-50%); }
-.shape-8 .c3 { right: 2%; top: 32%; transform: translateY(-50%) rotate(90deg); }
-.shape-8 .c4 { right: 2%; top: 68%; transform: translateY(-50%) rotate(90deg); }
-.shape-8 .c5 { left: 68%; bottom: 2%; transform: translateX(-50%); }
-.shape-8 .c6 { left: 32%; bottom: 2%; transform: translateX(-50%); }
-.shape-8 .c7 { left: 2%; top: 68%; transform: translateY(-50%) rotate(90deg); }
-.shape-8 .c8 { left: 2%; top: 32%; transform: translateY(-50%) rotate(90deg); }
+.shape-8 .table-unit { width: calc(var(--cell) * 1.8); height: calc(var(--cell) * 1.8); }
+.shape-8 .table-top { inset: 11%; font-size: calc(var(--cell) * 0.34); border-radius: calc(var(--cell) * 0.16); }
+.shape-8 .c1 { left: 33%; top: 2%; transform: translateX(-50%); }
+.shape-8 .c2 { left: 67%; top: 2%; transform: translateX(-50%); }
+.shape-8 .c3 { right: 2%; top: 33%; width: var(--ch); height: var(--cw); transform: translateY(-50%); }
+.shape-8 .c4 { right: 2%; top: 67%; width: var(--ch); height: var(--cw); transform: translateY(-50%); }
+.shape-8 .c5 { left: 67%; bottom: 2%; transform: translateX(-50%); }
+.shape-8 .c6 { left: 33%; bottom: 2%; transform: translateX(-50%); }
+.shape-8 .c7 { left: 2%; top: 67%; width: var(--ch); height: var(--cw); transform: translateY(-50%); }
+.shape-8 .c8 { left: 2%; top: 33%; width: var(--ch); height: var(--cw); transform: translateY(-50%); }
 
 /* —— 10 personas: banquete —— */
-.shape-10 .table-unit { width: 10.5rem; height: 3.8rem; }
-.shape-10 .table-top { inset: 22% 8%; border-radius: 999px; }
-.shape-10 .chair { width: 0.72rem; }
-.shape-10 .c1 { left: 18%; top: 2%; transform: translateX(-50%); }
-.shape-10 .c2 { left: 34%; top: 2%; transform: translateX(-50%); }
-.shape-10 .c3 { left: 50%; top: 2%; transform: translateX(-50%); }
-.shape-10 .c4 { left: 66%; top: 2%; transform: translateX(-50%); }
-.shape-10 .c5 { left: 82%; top: 2%; transform: translateX(-50%); }
-.shape-10 .c6 { left: 18%; bottom: 2%; transform: translateX(-50%); }
-.shape-10 .c7 { left: 34%; bottom: 2%; transform: translateX(-50%); }
-.shape-10 .c8 { left: 50%; bottom: 2%; transform: translateX(-50%); }
-.shape-10 .c9 { left: 66%; bottom: 2%; transform: translateX(-50%); }
-.shape-10 .c10 { left: 82%; bottom: 2%; transform: translateX(-50%); }
-.shape-10 .waiter-tag { top: 14%; right: 4%; }
+.shape-10 .table-unit { width: calc(var(--cell) * 2.86); }
+.shape-10 .table-top { inset: 16% 4%; border-radius: 999px; }
+.shape-10 .c1 { left: 14%; top: 4%; transform: translateX(-50%); }
+.shape-10 .c2 { left: 32%; top: 4%; transform: translateX(-50%); }
+.shape-10 .c3 { left: 50%; top: 4%; transform: translateX(-50%); }
+.shape-10 .c4 { left: 68%; top: 4%; transform: translateX(-50%); }
+.shape-10 .c5 { left: 86%; top: 4%; transform: translateX(-50%); }
+.shape-10 .c6 { left: 14%; bottom: 4%; transform: translateX(-50%); }
+.shape-10 .c7 { left: 32%; bottom: 4%; transform: translateX(-50%); }
+.shape-10 .c8 { left: 50%; bottom: 4%; transform: translateX(-50%); }
+.shape-10 .c9 { left: 68%; bottom: 4%; transform: translateX(-50%); }
+.shape-10 .c10 { left: 86%; bottom: 4%; transform: translateX(-50%); }
+
+@media (max-width: 480px) {
+  .btn-label { display: none; }
+  .head-actions { width: 100%; }
+  .head-actions .seg { margin-right: auto; }
+}
 
 /* —— Carga y vacío —— */
 .skeleton .sk-piece {
@@ -1043,7 +1155,7 @@ onUnmounted(() => {
   width: 3rem;
   height: 3rem;
   border-radius: 0.6rem;
-  background: color-mix(in srgb, var(--floor-edge) 70%, transparent);
+  background: rgba(244, 239, 230, 0.08);
   animation: pulse 1.2s ease-in-out infinite alternate;
 }
 @keyframes pulse { to { opacity: 0.45; } }
@@ -1062,7 +1174,7 @@ onUnmounted(() => {
 .empty h2 {
   margin: 0.4rem 0 0;
   color: var(--mirestaurante-ink);
-  font-family: "Bricolage Grotesque", var(--font-display);
+  font-family: var(--display);
   font-size: 1.35rem;
   letter-spacing: -0.02em;
 }
@@ -1109,7 +1221,7 @@ onUnmounted(() => {
 .sheet-head > div { flex: 1; min-width: 0; }
 .sheet h2 {
   margin: 0;
-  font-family: "Bricolage Grotesque", var(--font-display);
+  font-family: var(--display);
   font-size: 1.5rem;
   font-weight: 700;
   letter-spacing: -0.02em;
@@ -1117,21 +1229,19 @@ onUnmounted(() => {
   overflow-wrap: anywhere;
 }
 .sheet-head h2:only-of-type { flex: 1; }
-.sheet-sub { margin: 0.15rem 0 0; color: var(--mirestaurante-muted); font-size: 0.92rem; }
+.sheet-sub { margin: 0.3rem 0 0; color: var(--mirestaurante-muted); font-family: var(--mono); font-size: 0.78rem; }
 
 .status-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.3rem 0.65rem;
-  border-radius: 0.5rem;
-  font-size: 0.82rem;
+  padding: 0.25rem 0.55rem;
+  border-radius: 0.3rem;
+  font-size: 0.7rem;
   font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   white-space: nowrap;
 }
-.status-pill::before { content: ""; width: 0.45rem; height: 0.45rem; border-radius: 50%; background: currentColor; }
-.status-pill.free { background: var(--mirestaurante-success-soft); color: var(--mirestaurante-success); }
-.status-pill.busy { background: var(--mirestaurante-danger-soft); color: var(--mirestaurante-danger); }
+.status-pill.free { color: var(--mirestaurante-muted); border: 1.5px dashed var(--mirestaurante-line); }
+.status-pill.busy { background: var(--tomato); color: #fff; }
 
 .icon-close {
   display: grid;
@@ -1198,7 +1308,7 @@ onUnmounted(() => {
   border-color: var(--mirestaurante-primary);
   background: var(--mirestaurante-primary-soft);
 }
-.cap-opt b { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.cap-opt b { font-family: var(--mono); font-size: 1rem; }
 .cap-opt small { font-size: 0.66rem; font-weight: 500; color: var(--mirestaurante-muted); }
 .cap-shape {
   height: 1.1rem;
@@ -1280,11 +1390,10 @@ onUnmounted(() => {
   .sheet { border-radius: 1.3rem; padding: 1.25rem 1.35rem 1.4rem; }
   .sheet-handle { display: none; }
   .sheet-enter-from .sheet, .sheet-leave-to .sheet { transform: translateY(12px) scale(0.97); }
-  .floor-map { min-width: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .table-piece { animation: none; }
+  .table-piece, .table-list li { animation: none; }
   .skeleton .sk-piece { animation: none; }
   .sheet-enter-from .sheet, .sheet-leave-to .sheet,
   .toast-enter-from, .toast-leave-to { transform: none; }

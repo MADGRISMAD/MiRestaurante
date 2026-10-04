@@ -233,7 +233,7 @@ p { margin: 0; }
 
 .no-print {
   border: none;
-  background: #1a4a38;
+  background: #1b1814;
   color: #fff;
   border-radius: 0.55rem;
   padding: 0.65rem 1rem;

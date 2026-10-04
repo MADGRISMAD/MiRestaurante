@@ -5,58 +5,60 @@
 /* MiRestaurante fixed system palette — only light / dark */
 :root,
 html[data-theme="light"] {
-  --mirestaurante-primary: #1a4a38;
-  --mirestaurante-primary-soft: #e4efe9;
-  --mirestaurante-accent: #9a7b52;
-  --mirestaurante-ink: #141a17;
-  --mirestaurante-muted: #66706a;
-  --mirestaurante-line: rgba(20, 26, 23, 0.1);
-  --mirestaurante-surface: #ece8e1;
-  --mirestaurante-panel: #fffcf8;
+  /* Identidad de la landing: papel, tinta, pizarra y tomate */
+  --mirestaurante-primary: #d0371f;
+  --mirestaurante-primary-soft: #fbe7e2;
+  --mirestaurante-accent: #e8a020;
+  --mirestaurante-ink: #1b1814;
+  --mirestaurante-muted: #6f665a;
+  --mirestaurante-line: rgba(27, 24, 20, 0.12);
+  --mirestaurante-surface: #f4efe6;
+  --mirestaurante-panel: #fffdf8;
   --mirestaurante-panel-elevated: #ffffff;
-  --mirestaurante-topbar: #0f241c;
-  --mirestaurante-topbar-text: #eef3f0;
-  --mirestaurante-dock: #fffcf8;
-  --mirestaurante-dock-text: #5c675f;
+  --mirestaurante-topbar: #1c1a17;
+  --mirestaurante-topbar-text: #f4efe6;
+  --mirestaurante-dock: #fffdf8;
+  --mirestaurante-dock-text: #6f665a;
   --mirestaurante-danger: #b42318;
   --mirestaurante-danger-soft: #fdecea;
-  --mirestaurante-success: #1b5e20;
-  --mirestaurante-success-soft: #d9f0df;
-  --mirestaurante-warning: #e65100;
-  --mirestaurante-warning-soft: #fff3e0;
-  --mirestaurante-free: #1f7a45;
-  --mirestaurante-busy: #c0392b;
-  --mirestaurante-on-primary: #f8f6f2;
-  --mirestaurante-shadow: 0 1px 2px rgba(18, 24, 22, 0.04), 0 12px 32px rgba(18, 24, 22, 0.07);
+  --mirestaurante-success: #2f8f4e;
+  --mirestaurante-success-soft: #e1f1e5;
+  --mirestaurante-warning: #b26a00;
+  --mirestaurante-warning-soft: #fdf1d8;
+  --mirestaurante-free: #2f8f4e;
+  --mirestaurante-busy: #d0371f;
+  --mirestaurante-on-primary: #ffffff;
+  --mirestaurante-shadow: 0 1px 2px rgba(27, 24, 20, 0.05), 0 12px 32px rgba(27, 24, 20, 0.08);
   --mirestaurante-radius: 1rem;
   --font-sans: "Figtree", "Segoe UI", system-ui, sans-serif;
-  --font-display: "Figtree", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Bricolage Grotesque", "Figtree", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
   color-scheme: light;
 }
 
 html[data-theme="dark"] {
-  --mirestaurante-primary: #3d9a74;
-  --mirestaurante-primary-soft: rgba(61, 154, 116, 0.18);
-  --mirestaurante-accent: #c4a574;
-  --mirestaurante-ink: #eef2ef;
-  --mirestaurante-muted: #9aa59e;
-  --mirestaurante-line: rgba(238, 242, 239, 0.12);
-  --mirestaurante-surface: #101612;
-  --mirestaurante-panel: #1a221d;
-  --mirestaurante-panel-elevated: #222c26;
-  --mirestaurante-topbar: #0a1410;
-  --mirestaurante-topbar-text: #eef3f0;
-  --mirestaurante-dock: #151c18;
-  --mirestaurante-dock-text: #a7b2ab;
-  --mirestaurante-danger: #f97066;
-  --mirestaurante-danger-soft: rgba(249, 112, 102, 0.16);
-  --mirestaurante-success: #6ce9a6;
-  --mirestaurante-success-soft: rgba(108, 233, 166, 0.14);
-  --mirestaurante-warning: #fdb022;
-  --mirestaurante-warning-soft: rgba(253, 176, 34, 0.16);
-  --mirestaurante-free: #2f9e5b;
-  --mirestaurante-busy: #e4574d;
-  --mirestaurante-on-primary: #f8f6f2;
+  --mirestaurante-primary: #e0452c;
+  --mirestaurante-primary-soft: rgba(255, 106, 77, 0.16);
+  --mirestaurante-accent: #e8a020;
+  --mirestaurante-ink: #f4efe6;
+  --mirestaurante-muted: #a39a8d;
+  --mirestaurante-line: rgba(244, 239, 230, 0.12);
+  --mirestaurante-surface: #141210;
+  --mirestaurante-panel: #1c1a17;
+  --mirestaurante-panel-elevated: #272420;
+  --mirestaurante-topbar: #0f0e0c;
+  --mirestaurante-topbar-text: #f4efe6;
+  --mirestaurante-dock: #1c1a17;
+  --mirestaurante-dock-text: #a39a8d;
+  --mirestaurante-danger: #ff6a4d;
+  --mirestaurante-danger-soft: rgba(255, 106, 77, 0.16);
+  --mirestaurante-success: #4cc274;
+  --mirestaurante-success-soft: rgba(76, 194, 116, 0.14);
+  --mirestaurante-warning: #e8a020;
+  --mirestaurante-warning-soft: rgba(232, 160, 32, 0.16);
+  --mirestaurante-free: #4cc274;
+  --mirestaurante-busy: #e0452c;
+  --mirestaurante-on-primary: #ffffff;
   --mirestaurante-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 16px 40px rgba(0, 0, 0, 0.35);
   color-scheme: dark;
 }
@@ -104,8 +106,8 @@ textarea {
 
 .mirestaurante-waitlist-bg {
   background:
-    radial-gradient(ellipse 70% 50% at 20% 20%, rgba(154, 123, 82, 0.25), transparent 55%),
-    linear-gradient(155deg, var(--mirestaurante-topbar) 0%, #1a3f32 55%, #243d33 100%);
+    radial-gradient(ellipse 70% 50% at 20% 20%, rgba(208, 55, 31, 0.22), transparent 55%),
+    linear-gradient(155deg, #1c1a17 0%, #272420 60%, #2e2a25 100%);
 }
 
 .t-page {
@@ -161,8 +163,8 @@ textarea {
 
 .t-btn-primary {
   background: var(--mirestaurante-primary);
-  color: #f8f6f2;
-  box-shadow: 0 8px 20px rgba(26, 74, 56, 0.22);
+  color: #fff;
+  box-shadow: 0 6px 18px -6px rgba(208, 55, 31, 0.6);
 }
 
 .t-btn-ghost {
@@ -217,7 +219,7 @@ textarea {
 .t-select:focus {
   outline: none;
   border-color: var(--mirestaurante-primary);
-  box-shadow: 0 0 0 3px rgba(26, 74, 56, 0.14);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mirestaurante-primary) 18%, transparent);
 }
 
 .t-modal-bg {
