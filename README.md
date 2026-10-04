@@ -135,14 +135,14 @@ npm install -w frontend nodemon
 Funciona exactamente igual
 
 ## Despliegue en Vercel (producción)
-Igual que MiTiendita: frontend (Vite) y backend (Express) se despliegan juntos en un solo proyecto de Vercel
+Frontend (Vite) y backend (Express) se despliegan juntos en un solo proyecto de Vercel
 (`vercel.json` con `services`). El backend responde bajo `/api`, en el mismo dominio que el frontend.
 
-Cada push a `main` despliega a **producción** (`--prod`) con `.github/workflows/vercel-production.yml`, en el mismo
-equipo de Vercel que MiTiendita y en un proyecto propio, `mirestaurante` (se crea solo en el primer deploy).
+Cada push a `main` despliega a **producción** (`--prod`) con `.github/workflows/vercel-production.yml`, en el
+proyecto `mirestaurante` de la cuenta dueña de `VERCEL_TOKEN` (se crea solo en el primer deploy).
 
 Secrets del repositorio (Settings → Secrets and variables → Actions):
-- `VERCEL_TOKEN`: el mismo token que usa MiTiendita sirve.
+- `VERCEL_TOKEN`: token de tu cuenta de Vercel (Account Settings → Tokens).
 - `DATABASE_URI`: conexión de MongoDB Atlas (ver abajo).
 - `SECRET_KEY`: valor largo y aleatorio para firmar sesiones.
 
