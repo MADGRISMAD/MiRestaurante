@@ -139,3 +139,14 @@ El frontend se despliega automáticamente a **producción** (`--prod`, no previe
 mediante `.github/workflows/vercel-production.yml`. Requiere los secrets del repositorio
 `VERCEL_TOKEN`, `VERCEL_ORG_ID` y `VERCEL_PROJECT_ID`. El backend (Express + MongoDB) no corre en Vercel;
 define `VITE_API_URL`/la URL de API según `apiService.ts` apuntando a donde lo alojes.
+
+## Base de datos (producción)
+MiRestaurante usa el mismo cluster de MongoDB Atlas que MiTiendita (`cluster0.8z0wbpq.mongodb.net`), pero en
+su propia base `mirestaurante`, así que los datos no se comparten. En el hosting del backend define:
+
+```
+DATABASE_URI=mongodb+srv://madgrismad_db_user:<db_password>@cluster0.8z0wbpq.mongodb.net/
+DATABASE_NAME=mirestaurante
+```
+
+La contraseña va solo en las variables de entorno del servidor, nunca en el repositorio.
