@@ -12,7 +12,7 @@
         <span class="clock">{{ clock }}</span>
         <button
           type="button"
-          class="icon-btn"
+          class="icon-btn theme-toggle"
           :title="isDark ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'"
           @click="toggleUiTheme"
         >
@@ -240,7 +240,7 @@ onUnmounted(() => clearInterval(timer));
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  flex-wrap: wrap;
+  flex-shrink: 0;
   justify-content: flex-end;
 }
 
@@ -312,14 +312,23 @@ onUnmounted(() => clearInterval(timer));
 }
 
 .dock-item.router-link-active {
-  background: var(--mirestaurante-primary);
-  color: var(--mirestaurante-on-primary);
-  box-shadow: var(--mirestaurante-shadow);
+  background: var(--mirestaurante-primary-soft);
+  color: var(--mirestaurante-primary);
 }
 
 .dock-ico {
   display: grid;
   place-items: center;
+}
+
+@media (max-width: 640px) {
+  .pos-top { padding: 0.5rem 0.75rem; }
+  .brand-logo { width: 2.2rem; height: 2.2rem; }
+  .brand-venue { max-width: 42vw; }
+  .clock, .theme-toggle { display: none; }
+  .icon-btn { min-height: 2.5rem; min-width: 0; padding: 0 0.75rem; }
+  .pos-dock { padding-top: 0.35rem; }
+  .dock-item { min-height: 3.5rem; font-size: 0.75rem; }
 }
 
 .more-sheet {
