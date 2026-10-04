@@ -9,7 +9,8 @@
     "build": "webpack",
     "prod": "node dist/server.js",
     "seed:menu": "node scripts/seed-menu.js",
-    "seed:platform-admin": "node scripts/create-platform-admin.js"
+    "seed:platform-admin": "node scripts/create-platform-admin.js",
+    "test": "node --test"
   },
   "author": "",
   "license": "ISC",

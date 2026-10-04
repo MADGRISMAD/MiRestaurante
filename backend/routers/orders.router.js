@@ -5,13 +5,13 @@ const { requireAuth, requireActiveSubscription, requireRoles } = require('../mid
 router.get(
   '/',
   requireAuth, requireActiveSubscription,
-  requireRoles('admin', 'cashier', 'waiter', 'kitchen', 'hosstess'),
+  requireRoles('admin', 'cashier', 'waiter', 'kitchen', 'host'),
   orders.list
 );
 router.get(
   '/:id',
   requireAuth, requireActiveSubscription,
-  requireRoles('admin', 'cashier', 'waiter', 'kitchen', 'hosstess'),
+  requireRoles('admin', 'cashier', 'waiter', 'kitchen', 'host'),
   orders.getById
 );
 router.post('/', requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier', 'waiter'), orders.create);

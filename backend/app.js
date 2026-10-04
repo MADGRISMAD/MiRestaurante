@@ -29,6 +29,7 @@ app.use(async (_req, _res, next) => {
 });
 
 app.use('/usuarios', require('./routers/usuarios.router'));
+app.use('/team', require('./routers/team.router'));
 app.use('/mesas', require('./routers/tables.router'));
 app.use('/tables', require('./routers/tables.router'));
 app.use('/menus', require('./routers/menus.router'));

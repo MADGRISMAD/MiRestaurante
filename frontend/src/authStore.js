@@ -1,4 +1,5 @@
 import { reactive } from "vue";
+import { normalizeRole, roleHome, routeRoles, homeForRole as homeFor } from "./roles";
 
 const STORAGE_KEY = "mirestaurante_auth";
 
@@ -6,7 +7,8 @@ function load() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { token: null, role: null, tenantId: null, username: null };
-    return JSON.parse(raw);
+    const saved = JSON.parse(raw);
+    return { ...saved, role: normalizeRole(saved.role) };
   } catch {
     return { token: null, role: null, tenantId: null, username: null };
   }
@@ -30,7 +32,7 @@ function persist() {
 
 export function setSession({ token, role, tenantId, username }) {
   authStore.token = token || null;
-  authStore.role = role || null;
+  authStore.role = normalizeRole(role) || null;
   authStore.tenantId = tenantId || null;
   authStore.username = username || null;
   persist();
@@ -57,31 +59,8 @@ export function isPlatformAdmin() {
   return authStore.role === "platform_admin";
 }
 
-/** Rutas permitidas por rol (path names) */
-export const roleHome = {
-  admin: "main",
-  hosstess: "main",
-  waiter: "main",
-  kitchen: "kitchen",
-  cashier: "orders",
-  platform_admin: "platform",
-};
-
-export const routeRoles = {
-  dashboard: ["admin"],
-  main: ["admin", "hosstess", "waiter", "cashier"],
-  menu: ["admin", "waiter", "cashier"],
-  staff: ["admin"],
-  orders: ["admin", "cashier"],
-  kitchen: ["admin", "kitchen", "cashier", "waiter"],
-  waitlist: ["admin", "hosstess"],
-  settings: ["admin"],
-  setup: ["admin"],
-  billing: ["admin", "cashier"],
-  platform: ["platform_admin"],
-  printOrder: ["admin", "cashier", "waiter", "kitchen"],
-  printCash: ["admin", "cashier"],
-};
+// La tabla de roles y pantallas vive en ./roles.js
+export { roleHome, routeRoles };
 
 export function canAccessRoute(name) {
   const allowed = routeRoles[name];
@@ -90,5 +69,5 @@ export function canAccessRoute(name) {
 }
 
 export function homeForRole(role = authStore.role) {
-  return roleHome[role] || "main";
+  return homeFor(role);
 }

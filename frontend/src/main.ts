@@ -14,6 +14,7 @@ import {
   isAuthenticated,
 } from "./authStore";
 import "./apiService";
+import { screenRoles } from "./roles";
 
 import main from "./views/MainComponent.vue";
 import Landing from "./views/LandingView.vue";
@@ -34,6 +35,7 @@ import PrintOrderView from "./views/PrintOrderView.vue";
 import PrintCashCloseView from "./views/PrintCashCloseView.vue";
 import BillingView from "./views/BillingView.vue";
 import PlatformAdminView from "./views/PlatformAdminView.vue";
+import TeamView from "./views/TeamView.vue";
 
 const authMeta = (roles?: string[]) => ({
   requiresAuth: true,
@@ -49,38 +51,39 @@ const routes: RouteRecordRaw[] = [
   { path: "/reset/:token", name: "reset", component: ResetPasswordView },
   { path: "/invite/:token", name: "invite", component: InviteAcceptView },
   { path: "/setup", name: "setup", component: SetupWizard, meta: { requiresAuth: true } },
-  { path: "/dashboard", name: "dashboard", component: DashboardView, meta: authMeta(["admin"]) },
-  { path: "/main", name: "main", component: main, meta: authMeta(["admin", "hosstess", "waiter", "cashier"]) },
-  { path: "/menu", name: "menu", component: MenuView, meta: authMeta(["admin", "waiter", "cashier"]) },
+  { path: "/dashboard", name: "dashboard", component: DashboardView, meta: authMeta(screenRoles("dashboard")) },
+  { path: "/main", name: "main", component: main, meta: authMeta(screenRoles("main")) },
+  { path: "/menu", name: "menu", component: MenuView, meta: authMeta(screenRoles("menu")) },
   { path: "/meseros", redirect: "/menu" },
-  { path: "/staff", name: "staff", component: StaffView, meta: authMeta(["admin"]) },
-  { path: "/orders", name: "orders", component: OrdersView, meta: authMeta(["admin", "cashier"]) },
-  { path: "/kitchen", name: "kitchen", component: KitchenView, meta: authMeta(["admin", "kitchen", "cashier", "waiter"]) },
-  { path: "/waitlist", name: "waitlist", component: waitlist, meta: authMeta(["admin", "hosstess"]) },
-  { path: "/settings", name: "settings", component: SettingsView, meta: authMeta(["admin"]) },
+  { path: "/team", name: "team", component: TeamView, meta: authMeta(screenRoles("team")) },
+  { path: "/staff", name: "staff", component: StaffView, meta: authMeta(screenRoles("staff")) },
+  { path: "/orders", name: "orders", component: OrdersView, meta: authMeta(screenRoles("orders")) },
+  { path: "/kitchen", name: "kitchen", component: KitchenView, meta: authMeta(screenRoles("kitchen")) },
+  { path: "/waitlist", name: "waitlist", component: waitlist, meta: authMeta(screenRoles("waitlist")) },
+  { path: "/settings", name: "settings", component: SettingsView, meta: authMeta(screenRoles("settings")) },
   {
     path: "/billing",
     name: "billing",
     component: BillingView,
-    meta: { requiresAuth: true, roles: ["admin", "cashier"] },
+    meta: { requiresAuth: true, roles: screenRoles("billing") },
   },
   {
     path: "/platform",
     name: "platform",
     component: PlatformAdminView,
-    meta: { requiresAuth: true, roles: ["platform_admin"] },
+    meta: { requiresAuth: true, roles: screenRoles("platform") },
   },
   {
     path: "/print/order/:id",
     name: "printOrder",
     component: PrintOrderView,
-    meta: { requiresAuth: true, roles: ["admin", "cashier", "waiter", "kitchen"] },
+    meta: { requiresAuth: true, roles: screenRoles("printOrder") },
   },
   {
     path: "/print/cash/:id",
     name: "printCash",
     component: PrintCashCloseView,
-    meta: { requiresAuth: true, roles: ["admin", "cashier"] },
+    meta: { requiresAuth: true, roles: screenRoles("printCash") },
   },
 ];
 

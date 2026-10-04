@@ -36,6 +36,7 @@ async function ensureConnection() {
       await connection.connect();
       dbConnection = connection.db(_dbName);
       await migrateLegacyTenant();
+      await migrateLegacyRoles();
       connected = true;
       console.log(`MongoDB connected → ${_dbName}`);
     })().finally(() => {
@@ -43,6 +44,12 @@ async function ensureConnection() {
     });
   }
   await connecting;
+}
+
+// 'hosstess' (typo) pasó a 'host'; actualiza usuarios e invitaciones existentes.
+async function migrateLegacyRoles() {
+  await dbConnection.collection('users').updateMany({ role: 'hosstess' }, { $set: { role: 'host' } });
+  await dbConnection.collection('invites').updateMany({ role: 'hosstess' }, { $set: { role: 'host' } });
 }
 
 async function migrateLegacyTenant() {
@@ -167,6 +174,31 @@ async function UpdateUserById(id, data) {
   delete clean._id;
   await dbConnection.collection('users').updateOne({ _id: new ObjectId(id) }, { $set: clean });
   return await dbConnection.collection('users').findOne({ _id: new ObjectId(id) });
+}
+const USER_PUBLIC_FIELDS = { password: 0, resetToken: 0, resetExpires: 0 };
+
+async function GetUsersByTenant(tenantId) {
+  const users = await dbConnection
+    .collection('users')
+    .find({ tenantId: String(tenantId) }, { projection: USER_PUBLIC_FIELDS })
+    .sort({ createdAt: 1, name: 1 })
+    .toArray();
+  return users.map((u) => ({ ...u, id: String(u._id) }));
+}
+async function GetUserByIdAndTenant(id, tenantId) {
+  if (!ObjectId.isValid(id)) return null;
+  return await dbConnection
+    .collection('users')
+    .findOne({ _id: new ObjectId(id), tenantId: String(tenantId) });
+}
+async function CountUsersByRole(tenantId, role) {
+  return dbConnection.collection('users').countDocuments({ tenantId: String(tenantId), role });
+}
+async function DeleteUserByIdAndTenant(id, tenantId) {
+  if (!ObjectId.isValid(id)) return { deletedCount: 0 };
+  return await dbConnection
+    .collection('users')
+    .deleteOne({ _id: new ObjectId(id), tenantId: String(tenantId) });
 }
 async function FindUserByResetToken(token) {
   return await dbConnection.collection('users').findOne({
@@ -419,6 +451,7 @@ module.exports = {
   ensureConnection,
   CreateTenant, GetTenantById, UpdateTenant, ListTenants, CountUsersByTenant, GetTenantByMpPreapprovalId,
   CreateUser, FindUserByEmail, LoginUsuario, FindUserByUsername, UpdateUserById, FindUserByResetToken,
+  GetUsersByTenant, GetUserByIdAndTenant, CountUsersByRole, DeleteUserByIdAndTenant,
   AddMesa, UpdateStatusMesa, Getmesas, GetMesaFreeWaiter, GetMesaById, DeleteMesa, CloseMesas, GetNextMesaNumero,
   AddWaiter, GetWaiters, GetWaiterByCellphone, GetWaiterByDisponibility, DeleteWaiter, UpdateWaiter,
   AddWaitList, GetWaitList, GetWaitListByNumber, DeleteWaitList,

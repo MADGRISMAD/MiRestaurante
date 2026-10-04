@@ -134,6 +134,46 @@ npm install -w frontend nodemon
 ```
 Funciona exactamente igual
 
+## Roles y permisos
+Cada cuenta de un negocio tiene uno de cinco roles. El administrador crea las cuentas desde **Equipo y roles**
+(`/team`): usuario, contraseña inicial (se puede generar), rol y, para meseros, celular. También puede cambiar el
+rol, restablecer la contraseña o eliminar cuentas. Siempre debe quedar al menos un administrador, y nadie puede
+cambiar o eliminar su propia cuenta desde ahí. El alta por correo sigue disponible en **Configuración → Equipo**.
+
+**Fuente única de verdad:** `backend/models/roles.js` y `frontend/src/roles.js` (el test
+`backend/tests/roles.test.js` verifica que coincidan). Para agregar una pantalla, añade una fila a `SCREENS` en
+`frontend/src/roles.js`: el menú, la protección de rutas y la pantalla de inicio salen de ahí. Los endpoints del
+backend se protegen aparte con `requireRoles(...)` en cada router.
+
+| Pantalla | Ruta | Administrador | Mesero | Cocina | Caja | Anfitrión | Plataforma |
+|---|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| Resumen | `/dashboard` | ✓ |  |  |  |  |  |
+| Mesas | `/main` | ✓ | ✓ |  | ✓ | ✓ |  |
+| Pedido | `/menu` | ✓ | ✓ |  | ✓ |  |  |
+| Cocina | `/kitchen` | ✓ | ✓ | ✓ | ✓ |  |  |
+| Caja | `/orders` | ✓ |  |  | ✓ |  |  |
+| Lista de espera | `/waitlist` | ✓ |  |  |  | ✓ |  |
+| Meseros | `/staff` | ✓ |  |  |  |  |  |
+| Equipo y roles | `/team` | ✓ |  |  |  |  |  |
+| Facturación y planes | `/billing` | ✓ |  |  | ✓ |  |  |
+| Configuración | `/settings` | ✓ |  |  |  |  |  |
+| Cuenta | `/print/order/:id` | ✓ | ✓ | ✓ | ✓ |  |  |
+| Cierre de caja | `/print/cash/:id` | ✓ |  |  | ✓ |  |  |
+| Plataforma | `/platform` |  |  |  |  |  | ✓ |
+
+| Rol | Entra directo a |
+|---|---|
+| Administrador | Mesas (`/main`) |
+| Mesero | Mesas (`/main`) |
+| Cocina | Cocina (`/kitchen`) |
+| Caja | Caja (`/orders`) |
+| Anfitrión | Lista de espera (`/waitlist`) |
+
+`hosstess` (nombre anterior del Anfitrión) se migra a `host` automáticamente en la base de datos y en los tokens
+de sesión existentes.
+
+Pruebas del backend: `npm --workspace backend test`.
+
 ## Despliegue en Vercel (producción)
 Frontend (Vite) y backend (Express) se despliegan juntos en un solo proyecto de Vercel
 (`vercel.json` con `services`). El backend responde bajo `/api`, en el mismo dominio que el frontend.

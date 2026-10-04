@@ -62,16 +62,12 @@
 
       <section v-else-if="tab === 'team'" class="panel">
         <h2>Invitar al equipo</h2>
-        <p class="hint">Se envía un correo con enlace para unirse. Si SMTP no está configurado, el link aparece en la consola del backend.</p>
+        <p class="hint">Se envía un correo con enlace para unirse. ¿Sin correo? Crea la cuenta directo en <router-link to="/team">Equipo y roles</router-link>.</p>
         <form class="invite-form" @submit.prevent="sendInvite">
           <label>Correo<input v-model="invite.email" type="email" required placeholder="persona@negocio.com" /></label>
           <label>Rol
             <select v-model="invite.role">
-              <option value="admin">Admin</option>
-              <option value="hosstess">Hostess</option>
-              <option value="waiter">Mesero</option>
-              <option value="kitchen">Cocina</option>
-              <option value="cashier">Caja</option>
+              <option v-for="r in ROLE_DEFS" :key="r.id" :value="r.id">{{ r.label }}</option>
             </select>
           </label>
           <button type="submit" class="btn-primary" :disabled="inviting">{{ inviting ? 'Enviando…' : 'Enviar invitación' }}</button>
@@ -113,6 +109,7 @@ import { apiService } from "../apiService";
 import { saveVenueSettings, venueStore } from "../venueStore";
 import { themeStore, applyUiTheme } from "../themeStore";
 import { inviteStatusLabel, labelOf, roleLabel } from "../labels";
+import { ROLE_DEFS } from "../roles";
 
 const tab = ref("brand");
 const tabs = [
@@ -146,7 +143,7 @@ const invites = ref([]);
 const inviting = ref(false);
 const inviteMsg = ref("");
 const inviteErr = ref("");
-const invite = reactive({ email: "", role: "hosstess" });
+const invite = reactive({ email: "", role: "waiter" });
 
 async function saveBrand() {
   saving.value = true;

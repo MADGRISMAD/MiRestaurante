@@ -1,8 +1,7 @@
 const { ObjectId } = require('mongodb');
 const crypto = require('crypto');
 
-const ROLES = ['admin', 'hosstess', 'waiter', 'kitchen', 'cashier', 'platform_admin'];
-const TENANT_ROLES = ['admin', 'hosstess', 'waiter', 'kitchen', 'cashier'];
+const { ROLES, TENANT_ROLES } = require('./roles');
 const PLANS = ['basic', 'pro'];
 const BILLING_STATUSES = ['trialing', 'active', 'past_due', 'suspended'];
 const TRIAL_DAYS = 14;

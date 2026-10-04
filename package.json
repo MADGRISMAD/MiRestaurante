@@ -10,7 +10,8 @@
     "front:prod": "cd frontend && npm run build",
     "back:prod": "cd backend && npm run build",
     "dev": "npm-run-all --parallel back:dev front:dev",
-    "prod": "npm-run-all --parallel back:prod front:prod"
+    "prod": "npm-run-all --parallel back:prod front:prod",
+    "test": "npm --workspace backend test"
   },
   "keywords": [],
   "author": "",

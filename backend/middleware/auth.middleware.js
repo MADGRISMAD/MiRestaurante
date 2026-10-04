@@ -4,6 +4,7 @@ const {
   TENANT_ROLES,
   isSubscriptionActive,
 } = require('../models/tenant.model');
+const { normalizeRole } = require('../models/roles');
 const db = require('../database/mongodb');
 
 function requireAuth(req, res, next) {
@@ -12,7 +13,7 @@ function requireAuth(req, res, next) {
     return res.status(401).send('No autorizado');
   }
 
-  const role = payload.userRole;
+  const role = normalizeRole(payload.userRole);
   const isPlatform = role === 'platform_admin';
 
   if (!isPlatform && !payload.tenantId) {
@@ -35,6 +36,29 @@ function requireRoles(...allowed) {
       return res.status(403).send('Sin permiso para esta acción');
     }
     return next();
+  };
+}
+
+/**
+ * Como requireRoles, pero confirma el rol ACTUAL en la base de datos.
+ * El rol del token vale hasta 24 h: sin esto, a quien se le baja el rol o se
+ * elimina seguiría teniendo permisos con su token anterior. Úsalo en acciones
+ * sensibles (gestión del equipo).
+ */
+function requireFreshRole(...allowed) {
+  return async (req, res, next) => {
+    try {
+      const user = await db.FindUserByUsername(req.user?.username, req.tenantId);
+      const current = normalizeRole(user?.role);
+      if (!user || !allowed.includes(current)) {
+        return res.status(403).send('Sin permiso para esta acción');
+      }
+      req.user.role = current;
+      return next();
+    } catch (err) {
+      console.error(err);
+      return res.status(500).send(err.message || 'Error al verificar permisos');
+    }
   };
 }
 
@@ -77,6 +101,7 @@ async function requireActiveSubscription(req, res, next) {
 module.exports = {
   requireAuth,
   requireRoles,
+  requireFreshRole,
   requireActiveSubscription,
   ROLES,
   TENANT_ROLES,

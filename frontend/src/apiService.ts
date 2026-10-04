@@ -170,6 +170,21 @@ export const apiService = {
     return axios.post('/settings', settingsDTO).then((r) => r.data);
   },
 
+  getTeam() {
+    return axios.get('/team').then((r) => r.data);
+  },
+  createTeamMember(data: Record<string, unknown>) {
+    return axios.post('/team', data).then((r) => r.data);
+  },
+  changeTeamRole(id: string, role: string) {
+    return axios.put(`/team/${id}/role`, { role }).then((r) => r.data);
+  },
+  resetTeamPassword(id: string, password: string) {
+    return axios.put(`/team/${id}/password`, { password }).then((r) => r.data);
+  },
+  deleteTeamMember(id: string) {
+    return axios.delete(`/team/${id}`).then((r) => r.data);
+  },
   getInvites() {
     return axios.get('/invites').then((r) => r.data);
   },

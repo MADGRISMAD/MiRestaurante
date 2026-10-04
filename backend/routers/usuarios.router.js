@@ -23,7 +23,7 @@ router.get(
   '/waitlist/',
   requireAuth,
   requireActiveSubscription,
-  requireRoles('admin', 'hosstess'),
+  requireRoles('admin', 'host'),
   upload.none(),
   userController.GetWaitList
 );
@@ -31,7 +31,7 @@ router.post(
   '/waitlist/add',
   requireAuth,
   requireActiveSubscription,
-  requireRoles('admin', 'hosstess'),
+  requireRoles('admin', 'host'),
   upload.none(),
   userController.AddWaitList
 );
@@ -39,7 +39,7 @@ router.delete(
   '/waitlist/delete/:id',
   requireAuth,
   requireActiveSubscription,
-  requireRoles('admin', 'hosstess'),
+  requireRoles('admin', 'host'),
   upload.none(),
   userController.DeleteWaitList
 );

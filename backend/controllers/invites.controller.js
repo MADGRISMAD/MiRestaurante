@@ -4,6 +4,7 @@ const { sendInviteEmail } = require('../utils/mail.utils');
 const bcrypt = require('../utils/bcrypt.utils');
 const jwtCreator = require('../utils/jwt.utils');
 const { TENANT_ROLES } = require('../models/tenant.model');
+const { normalizeRole } = require('../models/roles');
 
 async function list(req, res) {
   try {
@@ -17,7 +18,7 @@ async function list(req, res) {
 async function create(req, res) {
   try {
     const email = String(req.body?.email || '').trim().toLowerCase();
-    const role = req.body?.role || 'hosstess';
+    const role = normalizeRole(req.body?.role) || 'waiter';
     if (!email || !email.includes('@')) {
       return res.status(400).send('Email inválido');
     }
@@ -132,7 +133,8 @@ async function accept(req, res) {
       return res.status(400).send('El usuario ya existe');
     }
 
-    const role = TENANT_ROLES.includes(invite.role) ? invite.role : 'hosstess';
+    const inviteRole = normalizeRole(invite.role);
+    const role = TENANT_ROLES.includes(inviteRole) ? inviteRole : 'waiter';
     const hashed = await bcrypt.hashPassword(password);
     await db.CreateUser({
       name,

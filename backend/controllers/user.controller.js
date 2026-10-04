@@ -6,6 +6,7 @@ const jwtCreator = require('../utils/jwt.utils');
 const db = require('../database/mongodb');
 const { createTenantDoc, newResetToken, ROLES } = require('../models/tenant.model');
 const { sendPasswordResetEmail } = require('../utils/mail.utils');
+const { normalizeRole } = require('../models/roles');
 
 const CreateUser = async (req, res) => {
   try {
@@ -80,17 +81,18 @@ const LoginUsuario = async (req, res, next) => {
     if (search) {
       const compare = await hasher.checkPassword(req.body.password, search.password);
       if (compare) {
-        const isPlatform = search.role === 'platform_admin';
+        const role = normalizeRole(search.role);
+        const isPlatform = role === 'platform_admin';
         if (!isPlatform && !search.tenantId) {
           return res.status(403).send('Usuario sin tenant asignado');
         }
         const token = jwtCreator.generateJWT({
           userId: search.username,
-          userRole: search.role,
+          userRole: role,
           tenantId: search.tenantId || null,
         });
         req.token = token;
-        req.role = search.role;
+        req.role = role;
         req.tenantId = search.tenantId || null;
         req.username = search.username;
         return next();

@@ -18,14 +18,7 @@ export const modalityLabel = {
   takeaway: "Para llevar",
 };
 
-export const roleLabel = {
-  admin: "Admin",
-  hosstess: "Hostess",
-  waiter: "Mesero",
-  kitchen: "Cocina",
-  cashier: "Caja",
-  platform_admin: "Platform",
-};
+export { roleLabel } from "./roles";
 
 export const inviteStatusLabel = {
   pending: "Pendiente",
