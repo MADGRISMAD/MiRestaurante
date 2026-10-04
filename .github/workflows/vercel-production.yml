@@ -10,9 +10,11 @@ concurrency:
   group: vercel-production
   cancel-in-progress: true
 
-# Proyecto propio "mirestaurante" en la cuenta dueña de VERCEL_TOKEN.
+# Proyecto propio "mirestaurante" dentro de tu equipo de Vercel.
+# Para usar otro equipo, define la variable del repo VERCEL_SCOPE.
 env:
   VERCEL_PROJECT: mirestaurante
+  VERCEL_SCOPE: ${{ vars.VERCEL_SCOPE || 'team_zTGwYKWZiYNP6cXzPReKRjpF' }}
 
 jobs:
   deploy:
@@ -30,7 +32,7 @@ jobs:
 
       # Crea el proyecto en Vercel la primera vez y lo enlaza
       - name: Link Vercel project
-        run: vercel link --yes --project "$VERCEL_PROJECT" --token="${{ secrets.VERCEL_TOKEN }}"
+        run: vercel link --yes --project "$VERCEL_PROJECT" --scope "$VERCEL_SCOPE" --token="${{ secrets.VERCEL_TOKEN }}"
 
       - name: Deploy to production
         env:
@@ -38,7 +40,7 @@ jobs:
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
           APP_URL: ${{ vars.APP_URL || 'https://mirestaurante.vercel.app' }}
         run: |
-          vercel deploy --prod --yes --token="${{ secrets.VERCEL_TOKEN }}" \
+          vercel deploy --prod --yes --scope "$VERCEL_SCOPE" --token="${{ secrets.VERCEL_TOKEN }}" \
             -e DATABASE_URI="$DATABASE_URI" \
             -e DATABASE_NAME=mirestaurante \
             -e SECRET_KEY="$SECRET_KEY" \
