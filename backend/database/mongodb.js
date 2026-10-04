@@ -26,13 +26,23 @@ function oidFilter(id, tenantId) {
   return filter;
 }
 
+let connecting = null;
+
+// Comparte una sola conexión entre peticiones concurrentes (serverless en Vercel)
 async function ensureConnection() {
   if (connected) return;
-  await connection.connect();
-  dbConnection = connection.db(_dbName);
-  connected = true;
-  console.log(`MongoDB connected → ${_dbName} @ ${_url}`);
-  await migrateLegacyTenant();
+  if (!connecting) {
+    connecting = (async () => {
+      await connection.connect();
+      dbConnection = connection.db(_dbName);
+      await migrateLegacyTenant();
+      connected = true;
+      console.log(`MongoDB connected → ${_dbName}`);
+    })().finally(() => {
+      connecting = null;
+    });
+  }
+  await connecting;
 }
 
 async function migrateLegacyTenant() {
@@ -406,6 +416,7 @@ async function UpdateCashSession(id, data, tenantId) {
 }
 
 module.exports = {
+  ensureConnection,
   CreateTenant, GetTenantById, UpdateTenant, ListTenants, CountUsersByTenant, GetTenantByMpPreapprovalId,
   CreateUser, FindUserByEmail, LoginUsuario, FindUserByUsername, UpdateUserById, FindUserByResetToken,
   AddMesa, UpdateStatusMesa, Getmesas, GetMesaFreeWaiter, GetMesaById, DeleteMesa, CloseMesas, GetNextMesaNumero,

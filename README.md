@@ -135,10 +135,18 @@ npm install -w frontend nodemon
 Funciona exactamente igual
 
 ## Despliegue en Vercel (producción)
-El frontend se despliega automáticamente a **producción** (`--prod`, no preview) en cada push a `main`
-mediante `.github/workflows/vercel-production.yml`. Requiere los secrets del repositorio
-`VERCEL_TOKEN`, `VERCEL_ORG_ID` y `VERCEL_PROJECT_ID`. El backend (Express + MongoDB) no corre en Vercel;
-define `VITE_API_URL`/la URL de API según `apiService.ts` apuntando a donde lo alojes.
+Igual que MiTiendita: frontend (Vite) y backend (Express) se despliegan juntos en un solo proyecto de Vercel
+(`vercel.json` con `services`). El backend responde bajo `/api`, en el mismo dominio que el frontend.
+
+Cada push a `main` despliega a **producción** (`--prod`) con `.github/workflows/vercel-production.yml`, en el mismo
+equipo de Vercel que MiTiendita y en un proyecto propio, `mirestaurante` (se crea solo en el primer deploy).
+
+Secrets del repositorio (Settings → Secrets and variables → Actions):
+- `VERCEL_TOKEN`: el mismo token que usa MiTiendita sirve.
+- `DATABASE_URI`: conexión de MongoDB Atlas (ver abajo).
+- `SECRET_KEY`: valor largo y aleatorio para firmar sesiones.
+
+Variable opcional `APP_URL` si usas un dominio propio (por defecto `https://mirestaurante.vercel.app`).
 
 ## Base de datos (producción)
 MiRestaurante usa el mismo cluster de MongoDB Atlas que MiTiendita (`cluster0.8z0wbpq.mongodb.net`), pero en
