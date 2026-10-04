@@ -93,6 +93,7 @@
 
       <!-- Plano -->
       <div v-else class="board">
+        <div ref="scrollRef" class="map-scroll" :style="mapH ? { height: `${mapH}px` } : null">
         <div
           ref="mapRef"
           class="floor-map"
@@ -137,7 +138,9 @@
             </span>
           </button>
         </div>
-        <ul class="legend" aria-hidden="true">
+        </div>
+        <p class="swipe-hint" aria-hidden="true">Desliza para ver todo el salón →</p>
+        <ul ref="legendRef" class="legend" aria-hidden="true">
           <li v-for="(label, st) in STATES" :key="st" :class="`lg-${st}`">{{ label }}</li>
         </ul>
       </div>
@@ -283,7 +286,7 @@
 
 <script setup>
 import AppShell from '../components/AppShell.vue';
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { apiService } from '../apiService.ts';
 
@@ -321,6 +324,9 @@ const capOptions = [
 
 const router = useRouter();
 const mapRef = ref(null);
+const scrollRef = ref(null);
+const legendRef = ref(null);
+const mapH = ref(null);
 const nameInput = ref(null);
 const closeBtn = ref(null);
 const mesas = ref([]);
@@ -637,6 +643,22 @@ async function refresh() {
 
 /* —— Interacción —— */
 
+// En escritorio el plano ocupa todo el alto entre la cabecera y el dock.
+// En celular tiene tamaño fijo legible y se desplaza con el dedo.
+function fitMap() {
+  const el = scrollRef.value;
+  if (!el || window.matchMedia('(max-width: 720px)').matches) {
+    mapH.value = null;
+    return;
+  }
+  const top = el.getBoundingClientRect().top;
+  const dock = document.querySelector('.pos-dock')?.offsetHeight || 0;
+  const legend = legendRef.value?.offsetHeight || 0;
+  mapH.value = Math.max(320, Math.floor(window.innerHeight - top - dock - legend - 28));
+}
+
+watch([view, editMap, loading, () => mesas.value.length], () => nextTick(fitMap));
+
 function setView(v) {
   view.value = v;
   if (v !== 'plano') toggleEditMap(false);
@@ -870,6 +892,7 @@ async function marcarServido() {
 
 onMounted(async () => {
   window.addEventListener('keydown', onKeydown);
+  window.addEventListener('resize', fitMap);
   try {
     await Promise.all([loadTables(), loadOrders(), loadWaiters()]);
   } catch {
@@ -882,6 +905,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown);
+  window.removeEventListener('resize', fitMap);
   clearInterval(pollTimer);
   clearInterval(clockTimer);
   clearTimeout(toastTimer);
@@ -902,8 +926,6 @@ onUnmounted(() => {
   --mono: "JetBrains Mono", ui-monospace, monospace;
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
-  /* El plano (3:2) cabe en pantalla sin quedar bajo el dock */
-  max-width: min(1200px, max(36rem, calc((100dvh - 22rem) * 1.5)));
   margin: 0 auto;
 }
 
@@ -1169,28 +1191,38 @@ onUnmounted(() => {
 .tile.sk { min-height: 7.4rem; border-style: dashed; background: transparent; animation: pulse 1.1s ease-in-out infinite alternate; cursor: default; }
 @keyframes pulse { to { opacity: 0.45; } }
 
+.swipe-hint { display: none; margin: -0.2rem 0 0; font-family: var(--mono); font-size: 0.72rem; color: var(--mirestaurante-muted); }
 .no-match { color: var(--mirestaurante-muted); text-align: center; padding: 2.5rem 1rem; }
 
 /* —— Plano: la pizarra de la landing ——
-   Todo se mide en cqw para que las mesas llenen su celda. */
+   Las mesas se miden con la celda (la menor entre ancho y alto)
+   para llenar el plano a cualquier tamaño. */
 .board { display: grid; gap: 0.7rem; }
+.map-scroll {
+  height: min(70dvh, 46rem);
+  overflow: auto;
+  overscroll-behavior: contain;
+  border-radius: 1.4rem;
+  box-shadow: 0 30px 60px -30px rgba(27, 24, 20, 0.6);
+  scrollbar-width: thin;
+}
 .floor-map {
-  --cell: calc(100cqw / 12);
-  container-type: inline-size;
+  --cell: min(calc(100cqw / 12), calc(100cqh / 8));
+  container-type: size;
   position: relative;
   display: grid;
   width: 100%;
-  aspect-ratio: 3 / 2;
+  height: 100%;
   background-color: var(--board);
   background-image: radial-gradient(circle, rgba(244, 239, 230, 0.09) 1.2px, transparent 1.6px);
   background-size: calc(100% / 12) calc(100% / 8);
   background-position: calc(100% / 24) calc(100% / 16);
   border-radius: 1.4rem;
-  box-shadow: 0 30px 60px -30px rgba(27, 24, 20, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
   user-select: none;
   -webkit-user-select: none;
 }
-.floor-map.editing { touch-action: none; box-shadow: 0 0 0 2px var(--amber), 0 30px 60px -30px rgba(27, 24, 20, 0.6); }
+.floor-map.editing { box-shadow: inset 0 0 0 2px var(--amber); }
 .grid-cell { pointer-events: none; margin: 2px; border-radius: 0.4rem; transition: background-color 120ms ease; }
 .grid-cell.drop { background: color-mix(in srgb, var(--amber) 18%, transparent); box-shadow: inset 0 0 0 1.5px var(--amber); }
 
@@ -1561,7 +1593,14 @@ onUnmounted(() => {
 
 /* —— Celular —— */
 @media (max-width: 720px) {
-  .edit-btn { display: none; }
+  /* Plano en celular: tamaño fijo, celdas de 60px, se desplaza con el dedo */
+  .map-scroll { height: auto; }
+  .floor-map { width: 45rem; height: 30rem; }
+  .edit-btn { padding: 0 0.75rem; font-size: 0.88rem; }
+  .swipe-hint { display: block; }
+  .floor-head { flex-wrap: wrap; align-items: flex-start; }
+  .head-actions { width: 100%; }
+  .head-actions .seg { margin-right: auto; }
   .btn-label { display: none; }
   .head-actions .btn-primary { width: 2.8rem; padding: 0; }
   .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
