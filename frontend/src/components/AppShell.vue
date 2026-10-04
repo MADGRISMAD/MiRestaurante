@@ -43,6 +43,32 @@
         </div>
       </div>
 
+      <section v-if="isWaiter && (waiterAlerts.length || askPermission)" class="alerts" aria-live="polite" aria-label="Avisos">
+        <TransitionGroup name="alert">
+          <article
+            v-for="a in waiterAlerts.slice(0, 3)"
+            :key="a.key"
+            class="alert"
+            :class="`al-${a.kind}`"
+          >
+            <span class="al-mark" aria-hidden="true">{{ a.kind === 'ready' ? '✓' : shortName(a.table.nombre) }}</span>
+            <div class="al-copy">
+              <p class="al-title">{{ alertText(a).title }}</p>
+              <p class="al-body">{{ alertText(a).body }}<span v-if="a.at"> · {{ ago(a.at) }}</span></p>
+            </div>
+            <button type="button" class="al-go" @click="goTo(a)">
+              {{ a.kind === 'ready' ? 'Ver mesa' : 'Voy' }}
+            </button>
+            <button type="button" class="al-x" aria-label="Enterado" @click="ackAlert(a)">×</button>
+          </article>
+        </TransitionGroup>
+        <p v-if="waiterAlerts.length > 3" class="al-more">+{{ waiterAlerts.length - 3 }} avisos más en Mesas</p>
+        <div v-if="askPermission" class="al-perm">
+          <span>Activa los avisos del teléfono</span>
+          <button type="button" @click="enableSystemAlerts">Activar</button>
+        </div>
+      </section>
+
       <main class="pos-content">
         <slot />
       </main>
@@ -56,6 +82,7 @@
         class="dock-item"
       >
         <span class="dock-ico" v-html="item.icon"></span>
+        <span v-if="item.name === 'main' && isWaiter && waiterAlerts.length" class="dock-badge">{{ waiterAlerts.length }}</span>
         <span class="dock-label">{{ item.label }}</span>
       </router-link>
     </nav>
@@ -69,6 +96,15 @@ import { venueStore } from "../venueStore";
 import { themeStore, toggleUiTheme } from "../themeStore";
 import { clearSession, canAccessRoute, hasRole } from "../authStore";
 import { apiService } from "../apiService";
+import {
+  alertsState,
+  waiterAlerts,
+  alertText,
+  ackAlert,
+  startWaiterAlerts,
+  stopWaiterAlerts,
+  enableSystemAlerts,
+} from "../waiterAlerts";
 
 const router = useRouter();
 const moreOpen = ref(false);
@@ -127,7 +163,26 @@ const allMore = [
 const dock = computed(() => allDock.filter((i) => canAccessRoute(i.name)));
 const moreItems = computed(() => allMore.filter((i) => canAccessRoute(i.name)));
 
+const isWaiter = computed(() => hasRole("waiter"));
+const askPermission = computed(() => isWaiter.value && alertsState.permission === "default");
+
+function shortName(name) {
+  const m = String(name || "").match(/(\d+)/);
+  return m ? m[1] : String(name || "").slice(0, 3).toUpperCase();
+}
+
+function ago(at) {
+  const min = Math.max(0, Math.floor((now.value - new Date(at)) / 60000));
+  return min < 1 ? "ahora" : `hace ${min} min`;
+}
+
+function goTo(a) {
+  ackAlert(a);
+  router.push({ path: "/main", query: { mesa: a.table.id } });
+}
+
 function logout() {
+  stopWaiterAlerts();
   moreOpen.value = false;
   clearSession();
   router.push("/login");
@@ -147,6 +202,7 @@ onMounted(() => {
     now.value = new Date();
   }, 30000);
   loadBilling();
+  startWaiterAlerts();
 });
 onUnmounted(() => clearInterval(timer));
 </script>
@@ -319,6 +375,131 @@ onUnmounted(() => clearInterval(timer));
 .dock-ico {
   display: grid;
   place-items: center;
+}
+
+.dock-item { position: relative; }
+.dock-badge {
+  position: absolute;
+  top: 0.35rem;
+  left: calc(50% + 0.5rem);
+  min-width: 1.2rem;
+  height: 1.2rem;
+  padding: 0 0.3rem;
+  border-radius: 99px;
+  display: grid;
+  place-items: center;
+  background: var(--mirestaurante-primary);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  box-shadow: 0 0 0 2px var(--mirestaurante-dock);
+}
+
+/* —— Avisos del mesero —— */
+.alerts {
+  position: sticky;
+  top: 0;
+  z-index: 25;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.45rem;
+  padding: 0.6rem 0.85rem 0;
+}
+.alert {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.6rem 0.6rem 0.6rem 0.65rem;
+  border-radius: 1rem;
+  background: #1c1a17;
+  color: #f4efe6;
+  box-shadow: 0 14px 30px -14px rgba(20, 18, 16, 0.55);
+}
+.al-mark {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: 0.7rem;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+.al-assigned .al-mark { background: #e8a020; color: #2a1d05; animation: al-pulse 1.6s ease-out infinite; }
+.al-ready .al-mark { background: #4cc274; color: #08210f; }
+@keyframes al-pulse { 0% { box-shadow: 0 0 0 0 rgba(232, 160, 32, 0.6); } 100% { box-shadow: 0 0 0 0.6rem rgba(232, 160, 32, 0); } }
+.al-copy { flex: 1; min-width: 0; }
+.al-title { margin: 0; font-weight: 700; font-size: 0.95rem; line-height: 1.2; }
+.al-body { margin: 0.15rem 0 0; font-size: 0.8rem; color: rgba(244, 239, 230, 0.7); line-height: 1.3; }
+.al-go {
+  flex-shrink: 0;
+  min-height: 2.6rem;
+  padding: 0 1rem;
+  border: none;
+  border-radius: 0.7rem;
+  background: var(--mirestaurante-primary);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.al-ready .al-go { background: #2f8f4e; }
+.al-go:active, .al-x:active { transform: scale(0.95); }
+.al-x {
+  flex-shrink: 0;
+  width: 2.2rem;
+  height: 2.6rem;
+  border: none;
+  border-radius: 0.6rem;
+  background: transparent;
+  color: rgba(244, 239, 230, 0.55);
+  font-size: 1.4rem;
+  cursor: pointer;
+}
+.al-more { margin: 0; font-size: 0.78rem; color: var(--mirestaurante-muted); text-align: center; }
+.al-perm {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 0.6rem 0.55rem 0.85rem;
+  border-radius: 0.85rem;
+  border: 1.5px dashed var(--mirestaurante-line);
+  font-size: 0.82rem;
+  color: var(--mirestaurante-ink);
+}
+.al-perm span { flex: 1; }
+.al-perm button {
+  min-height: 2.4rem;
+  padding: 0 0.9rem;
+  border: 1.5px solid var(--mirestaurante-ink);
+  border-radius: 0.65rem;
+  background: transparent;
+  color: var(--mirestaurante-ink);
+  font-weight: 700;
+  cursor: pointer;
+}
+.alert-enter-active { transition: opacity 220ms ease, transform 320ms cubic-bezier(0.23, 1, 0.32, 1); }
+.alert-leave-active { transition: opacity 160ms ease, transform 160ms ease-out; }
+.alert-enter-from { opacity: 0; transform: translateY(-0.75rem) scale(0.98); }
+.alert-leave-to { opacity: 0; transform: translateX(1.5rem); }
+@media (max-width: 640px) {
+  .alerts { padding: 0.5rem 0.6rem 0; gap: 0.35rem; }
+  .alert { gap: 0.55rem; padding: 0.4rem 0.35rem 0.4rem 0.4rem; border-radius: 0.9rem; }
+  .al-mark { width: 2.2rem; height: 2.2rem; font-size: 0.95rem; border-radius: 0.6rem; }
+  .al-title, .al-body { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .al-title { font-size: 0.88rem; }
+  .al-body { font-size: 0.74rem; }
+  .al-go { min-height: 2.3rem; padding: 0 0.8rem; font-size: 0.88rem; }
+  .al-x { width: 1.9rem; height: 2.3rem; }
+  .al-perm { padding: 0.3rem 0.35rem 0.3rem 0.75rem; font-size: 0.78rem; }
+  .al-perm button { min-height: 2.1rem; padding: 0 0.7rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .al-assigned .al-mark { animation: none; }
+  .alert-enter-from, .alert-leave-to { transform: none; }
 }
 
 @media (max-width: 640px) {

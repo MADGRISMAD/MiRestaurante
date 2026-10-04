@@ -44,12 +44,25 @@
 
       <div v-if="modalAsignarMesa" class="modal-bg" @click.self="cerrarModalAsignarMesa">
         <div class="modal">
-          <h3>Asignar mesa</h3>
-          <select v-model="mesaSeleccionada">
-            <option v-for="mesa in mesasDisponibles" :key="mesa.id || mesa.numero" :value="mesa.id || mesa.numero">
-              {{ mesa.nombre }} ({{ mesa.capacidad }})
-            </option>
-          </select>
+          <h3>Asignar mesa a {{ clienteSeleccionado?.nombre }}</h3>
+          <label class="lbl">Mesa
+            <select v-model="mesaSeleccionada">
+              <option v-for="mesa in mesasDisponibles" :key="mesa.id || mesa.numero" :value="mesa.id || mesa.numero">
+                {{ mesa.nombre }} ({{ mesa.capacidad }} lugares)
+              </option>
+            </select>
+          </label>
+          <label class="lbl">Personas
+            <input v-model.number="personas" type="number" min="1" max="30" inputmode="numeric" />
+          </label>
+          <label class="lbl">Mesero (se le avisa)
+            <select v-model="meseroSeleccionado">
+              <option value="">Sin mesero</option>
+              <option v-for="w in meseros" :key="w.cellphone" :value="w.cellphone">
+                {{ w.name }} {{ w.lastName }} — {{ w.load }} {{ w.load === 1 ? 'mesa' : 'mesas' }}{{ w.suggested ? ' · sugerido' : '' }}
+              </option>
+            </select>
+          </label>
           <div class="modal-actions">
             <button type="button" class="btn-primary" @click="asignarMesaACliente">Asignar</button>
             <button type="button" @click="cerrarModalAsignarMesa">Cancelar</button>
@@ -74,6 +87,9 @@ const modalAsignarMesa = ref(false);
 const clienteSeleccionado = ref(null);
 const mesaSeleccionada = ref(null);
 const mesasDisponibles = ref([]);
+const meseros = ref([]);
+const meseroSeleccionado = ref('');
+const personas = ref(2);
 
 onMounted(async () => {
   clientesEnEspera.value = (await GetWaitlist()) || [];
@@ -126,7 +142,17 @@ function cerrarModalOpcionesCliente() {
 
 async function mostrarModalAsignarMesa() {
   try {
-    mesasDisponibles.value = (await apiService.getTables()).filter((m) => m.disponible);
+    const [tables, waiters] = await Promise.all([apiService.getTables(), apiService.getWaiters().catch(() => [])]);
+    mesasDisponibles.value = tables.filter((m) => m.disponible);
+    mesaSeleccionada.value = mesasDisponibles.value[0]?.id || null;
+    // Sugerimos al mesero con menos mesas ocupadas
+    const load = new Map();
+    for (const m of tables) if (!m.disponible && m.mesero) load.set(String(m.mesero), (load.get(String(m.mesero)) || 0) + 1);
+    const list = (waiters || []).map((w) => ({ ...w, load: load.get(String(w.cellphone)) || 0 })).sort((a, b) => a.load - b.load);
+    if (list.length > 1) list[0].suggested = true;
+    meseros.value = list;
+    meseroSeleccionado.value = list[0]?.cellphone || '';
+    personas.value = 2;
     modalAsignarMesa.value = true;
   } catch (err) {
     console.error(err);
@@ -144,6 +170,8 @@ async function asignarMesaACliente() {
       await apiService.editTable(mesaSeleccionada.value, {
         disponible: false,
         personaTitular: clienteSeleccionado.value.nombre,
+        personas: personas.value || null,
+        mesero: meseroSeleccionado.value || null,
       });
       await apiService.deleteWaitlist(clienteSeleccionado.value.telefono);
       clientesEnEspera.value = clientesEnEspera.value.filter(
@@ -190,6 +218,8 @@ function cerrarModales() {
 .modal-bg { position:fixed; inset:0; background:rgba(10,16,14,.48); backdrop-filter:blur(6px); display:flex; align-items:center; justify-content:center; z-index:50; }
 .modal { background:var(--mirestaurante-panel); color:var(--mirestaurante-ink); border-radius:1.15rem; padding:1.25rem; width:min(22rem,92vw); display:grid; gap:.7rem; border:1px solid var(--mirestaurante-line); }
 .modal input, .modal select { border:1px solid var(--mirestaurante-line); border-radius:.65rem; padding:.6rem; background:var(--mirestaurante-panel-elevated); color:var(--mirestaurante-ink); }
+.lbl { display:grid; gap:.3rem; font-weight:600; font-size:.88rem; }
+.modal input, .modal select { font-size:16px; min-height:2.9rem; }
 .modal-actions { display:flex; flex-wrap:wrap; gap:.45rem; }
 .modal-actions button { border:1px solid var(--mirestaurante-line); background:var(--mirestaurante-panel-elevated); color:var(--mirestaurante-ink); border-radius:.6rem; padding:.55rem .75rem; cursor:pointer; font-weight:600; }
 .danger { color:var(--mirestaurante-danger); }

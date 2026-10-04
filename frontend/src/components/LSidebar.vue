@@ -1,50 +1,67 @@
 <template>
   <div class="ticket-panel">
-    <h2>Cuenta</h2>
-    <p v-if="tableName" class="mesa">Mesa: {{ tableName }}</p>
+    <header class="tp-head">
+      <h2>Cuenta</h2>
+      <span v-if="count" class="tp-count">{{ count }} {{ count === 1 ? 'platillo' : 'platillos' }}</span>
+      <slot name="close" />
+    </header>
 
-    <ul class="lines">
-      <li v-for="(producto, index) in store.platillosSeleccionados" :key="index">
+    <ul v-if="store.platillosSeleccionados.length" class="lines">
+      <li v-for="(producto, index) in store.platillosSeleccionados" :key="index" class="line">
         <div class="line-main">
-          <div>
+          <div class="line-copy">
             <p class="name">{{ producto.name }}</p>
-            <p class="unit">{{ formatearMoneda(producto.price) }} c/u</p>
+            <p class="unit">{{ money(producto.price) }} c/u</p>
           </div>
           <div class="qty">
-            <button type="button" @click="disminuirCantidad(index)">−</button>
+            <button
+              type="button"
+              :aria-label="producto.quantity > 1 ? `Quitar uno de ${producto.name}` : `Quitar ${producto.name}`"
+              @click="disminuirCantidad(index)"
+            >{{ producto.quantity > 1 ? '−' : '×' }}</button>
             <span>{{ producto.quantity }}</span>
-            <button type="button" @click="incrementarCantidad(index)">+</button>
+            <button type="button" :aria-label="`Agregar uno de ${producto.name}`" @click="incrementarCantidad(index)">+</button>
           </div>
-          <p class="line-total">{{ formatearMoneda(producto.price * producto.quantity) }}</p>
-          <button type="button" class="x" @click="eliminarProducto(index)">×</button>
+          <p class="line-total">{{ money(producto.price * producto.quantity) }}</p>
         </div>
+        <input
+          v-if="noteOpen[index] || producto.notes"
+          v-model="producto.notes"
+          class="note"
+          type="text"
+          maxlength="80"
+          enterkeyhint="done"
+          placeholder="Ej. sin cebolla, término medio"
+          :aria-label="`Nota para ${producto.name}`"
+        />
+        <button v-else type="button" class="add-note" @click="noteOpen[index] = true">+ Nota para cocina</button>
       </li>
     </ul>
 
-    <p v-if="!store.platillosSeleccionados.length" class="empty">Agrega platillos del menú.</p>
+    <p v-else class="empty">Toca los platillos del menú para agregarlos.</p>
 
     <div class="totals">
-      <div><span>Subtotal</span><span>{{ formatearMoneda(subtotal) }}</span></div>
-      <div v-if="deliveryMethod === 'takeaway'"><span>Reparto</span><span>{{ formatearMoneda(deliveryTax) }}</span></div>
-      <div><span>IVA (8%)</span><span>{{ formatearMoneda(subtotal * taxRate) }}</span></div>
-      <div class="grand"><span>Total</span><span>{{ formatearMoneda(total) }}</span></div>
+      <div><span>Subtotal</span><span>{{ money(subtotal) }}</span></div>
+      <div v-if="deliveryMethod === 'takeaway'"><span>Reparto</span><span>{{ money(deliveryTax) }}</span></div>
+      <div><span>IVA (8%)</span><span>{{ money(subtotal * taxRate) }}</span></div>
+      <div class="grand"><span>Total</span><span>{{ money(total) }}</span></div>
     </div>
 
-    <div class="modality">
-      <button type="button" :class="{ on: deliveryMethod === 'dine-in' }" @click="setDeliveryMethod('dine-in')">En salón</button>
-      <button type="button" :class="{ on: deliveryMethod === 'takeaway' }" @click="setDeliveryMethod('takeaway')">Para llevar</button>
+    <div v-if="!tableId" class="modality" role="group" aria-label="Modalidad">
+      <button type="button" :aria-pressed="deliveryMethod === 'dine-in'" @click="setDeliveryMethod('dine-in')">En salón</button>
+      <button type="button" :aria-pressed="deliveryMethod === 'takeaway'" @click="setDeliveryMethod('takeaway')">Para llevar</button>
     </div>
 
     <button type="button" class="send" :disabled="!store.platillosSeleccionados.length || sending" @click="finalizeOrder">
-      {{ sending ? 'Enviando…' : 'Enviar a cocina' }}
+      {{ sending ? 'Enviando…' : tableName ? `Enviar a cocina · ${tableName}` : 'Enviar a cocina' }}
     </button>
-    <p v-if="msg" class="msg">{{ msg }}</p>
+    <p v-if="msg" class="msg" :class="{ error: msgError }" role="status">{{ msg }}</p>
   </div>
 </template>
 
 <script>
 import { store } from "../store";
-import { computed, ref } from "vue";
+import { computed, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { apiService } from "../apiService";
 
@@ -53,14 +70,18 @@ export default {
     tableId: { type: String, default: "" },
     tableName: { type: String, default: "" },
   },
-  setup(props) {
+  emits: ["sent"],
+  setup(props, { emit }) {
     const router = useRouter();
     const deliveryMethod = ref("dine-in");
     const deliveryTaxRate = 50;
     const taxRate = 0.08;
     const sending = ref(false);
     const msg = ref("");
+    const msgError = ref(false);
+    const noteOpen = reactive({});
 
+    const count = computed(() => store.platillosSeleccionados.reduce((n, p) => n + p.quantity, 0));
     const subtotal = computed(() =>
       store.platillosSeleccionados.reduce((sum, p) => sum + p.price * p.quantity, 0)
     );
@@ -75,10 +96,9 @@ export default {
     const disminuirCantidad = (index) => {
       if (store.platillosSeleccionados[index].quantity > 1) {
         store.platillosSeleccionados[index].quantity -= 1;
+      } else {
+        store.platillosSeleccionados.splice(index, 1);
       }
-    };
-    const eliminarProducto = (index) => {
-      store.platillosSeleccionados.splice(index, 1);
     };
     const setDeliveryMethod = (method) => {
       deliveryMethod.value = method;
@@ -87,33 +107,40 @@ export default {
     const finalizeOrder = async () => {
       sending.value = true;
       msg.value = "";
+      msgError.value = false;
       try {
-        const response = await apiService.createOrder({
+        await apiService.createOrder({
           tableId: props.tableId || null,
           tableName: props.tableName || (deliveryMethod.value === "dine-in" ? "Salón" : "Para llevar"),
-          modality: deliveryMethod.value,
+          modality: props.tableId ? "dine-in" : deliveryMethod.value,
           items: store.platillosSeleccionados.map((p) => ({
             foodId: p.id,
             name: p.name,
             price: p.price,
             quantity: p.quantity,
+            notes: (p.notes || "").trim(),
           })),
         });
         store.platillosSeleccionados.splice(0, store.platillosSeleccionados.length);
-        msg.value = `Pedido ${response.id?.slice(-6) || ""} enviado.`;
-        setTimeout(() => router.push("/kitchen"), 700);
+        Object.keys(noteOpen).forEach((k) => delete noteOpen[k]);
+        emit("sent");
+        // Con mesa, el mesero vuelve al salón; sin mesa se queda para el siguiente pedido
+        if (props.tableId) router.push("/main");
+        else msg.value = "Pedido enviado a cocina.";
       } catch (error) {
-        msg.value = error.response?.data || "Error al enviar el pedido.";
+        msgError.value = true;
+        msg.value = error.response?.data || "No se pudo enviar el pedido. Intenta de nuevo.";
       } finally {
         sending.value = false;
       }
     };
 
-    const formatearMoneda = (cantidad) =>
+    const money = (cantidad) =>
       Number(cantidad || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 
     return {
       store,
+      count,
       deliveryMethod,
       subtotal,
       taxRate,
@@ -121,12 +148,13 @@ export default {
       total,
       incrementarCantidad,
       disminuirCantidad,
-      eliminarProducto,
       setDeliveryMethod,
       finalizeOrder,
-      formatearMoneda,
+      money,
       sending,
       msg,
+      msgError,
+      noteOpen,
     };
   },
 };
@@ -134,34 +162,119 @@ export default {
 
 <style scoped>
 .ticket-panel {
-  width: 21rem;
-  flex-shrink: 0;
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+  --tomato: #d0371f;
+  display: grid;
+  gap: 0.85rem;
   background: var(--mirestaurante-panel);
   color: var(--mirestaurante-ink);
-  border: 1px solid var(--mirestaurante-line);
-  border-radius: 1.15rem;
-  padding: 1.15rem;
-  box-shadow: var(--mirestaurante-shadow);
+  border: 1.5px solid var(--mirestaurante-line);
+  border-radius: 1.2rem;
+  padding: 1.1rem;
 }
-h2 { margin: 0 0 .35rem; font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; letter-spacing: -0.01em; }
-.mesa { margin: 0 0 .75rem; font-size: .85rem; color: var(--mirestaurante-muted); }
-.lines { list-style: none; margin: 0; padding: 0; max-height: 40vh; overflow: auto; }
-.line-main { display: grid; grid-template-columns: 1fr auto auto auto; gap: .4rem; align-items: center; padding: .5rem 0; border-bottom: 1px solid var(--mirestaurante-line); }
-.name { margin: 0; font-size: .85rem; font-weight: 600; }
-.unit { margin: 0; font-size: .72rem; color: var(--mirestaurante-muted); }
-.qty { display: flex; align-items: center; gap: .25rem; }
-.qty button { width: 1.55rem; height: 1.55rem; border: 1px solid var(--mirestaurante-line); background: var(--mirestaurante-panel-elevated); color: var(--mirestaurante-ink); border-radius: .4rem; cursor: pointer; }
-.line-total { font-size: .8rem; font-weight: 700; margin: 0; }
-.x { border: none; background: transparent; color: var(--mirestaurante-danger); cursor: pointer; font-size: 1.1rem; }
-.empty { color: var(--mirestaurante-muted); font-size: .85rem; }
-.totals { margin-top: .85rem; display: grid; gap: .35rem; font-size: .88rem; }
+.tp-head { display: flex; align-items: center; gap: 0.6rem; }
+h2 {
+  margin: 0;
+  font-family: "Bricolage Grotesque", var(--font-display);
+  font-size: 1.4rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+.tp-count { flex: 1; font-family: var(--mono); font-size: 0.75rem; color: var(--mirestaurante-muted); }
+
+.lines { list-style: none; margin: 0; padding: 0; max-height: 46vh; overflow: auto; overscroll-behavior: contain; }
+.line { padding: 0.6rem 0; border-bottom: 1px dashed var(--mirestaurante-line); }
+.line:first-child { padding-top: 0; }
+.line-main { display: grid; grid-template-columns: 1fr auto auto; gap: 0.6rem; align-items: center; }
+.line-copy { min-width: 0; }
+.name { margin: 0; font-size: 0.92rem; font-weight: 600; line-height: 1.25; }
+.unit { margin: 0.1rem 0 0; font-family: var(--mono); font-size: 0.7rem; color: var(--mirestaurante-muted); }
+.qty {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.15rem;
+  border-radius: 0.7rem;
+  border: 1.5px solid var(--mirestaurante-line);
+}
+.qty span { min-width: 1.6rem; text-align: center; font-family: var(--mono); font-weight: 700; font-size: 0.9rem; }
+.qty button {
+  width: 2.25rem;
+  height: 2.25rem;
+  border: none;
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--mirestaurante-ink) 6%, transparent);
+  color: var(--mirestaurante-ink);
+  font-size: 1.1rem;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform 120ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.qty button:active { transform: scale(0.9); }
+.line-total { margin: 0; min-width: 4.8rem; text-align: right; font-family: var(--mono); font-size: 0.85rem; font-weight: 700; }
+.add-note {
+  margin-top: 0.25rem;
+  padding: 0.3rem 0;
+  min-height: 2rem;
+  border: none;
+  background: none;
+  color: var(--mirestaurante-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.note {
+  width: 100%;
+  margin-top: 0.4rem;
+  min-height: 2.6rem;
+  padding: 0.45rem 0.7rem;
+  border: 1.5px dashed color-mix(in srgb, #e8a020 70%, transparent);
+  border-radius: 0.6rem;
+  background: color-mix(in srgb, #e8a020 8%, transparent);
+  color: var(--mirestaurante-ink);
+  font: inherit;
+  font-size: 16px; /* evita zoom en iOS */
+}
+.note:focus-visible { outline: 2px solid #e8a020; outline-offset: 1px; }
+.empty { margin: 0; padding: 1.25rem 0.5rem; text-align: center; color: var(--mirestaurante-muted); font-size: 0.9rem; border: 1.5px dashed var(--mirestaurante-line); border-radius: 0.9rem; }
+
+.totals { display: grid; gap: 0.3rem; font-family: var(--mono); font-size: 0.82rem; color: var(--mirestaurante-muted); }
 .totals > div { display: flex; justify-content: space-between; }
-.grand { font-weight: 700; font-size: 1.05rem; margin-top: .3rem; }
-.modality { display: grid; grid-template-columns: 1fr 1fr; gap: .45rem; margin: .95rem 0; }
-.modality button { border: 1px solid var(--mirestaurante-line); background: var(--mirestaurante-panel-elevated); color: var(--mirestaurante-ink); border-radius: .7rem; padding: .7rem; cursor: pointer; font-size: .9rem; font-weight: 700; min-height: 3rem; }
-.modality button.on { background: var(--mirestaurante-ink); color: var(--mirestaurante-panel); border-color: transparent; }
-.send { width: 100%; border: none; border-radius: .85rem; padding: .9rem; background: var(--mirestaurante-primary); color: var(--mirestaurante-on-primary); font-weight: 700; font-size: 1.05rem; cursor: pointer; min-height: 3.25rem; box-shadow: var(--mirestaurante-shadow); }
-.send:disabled { opacity: .55; cursor: not-allowed; }
-.msg { margin: .55rem 0 0; font-size: .82rem; color: var(--mirestaurante-success); }
-@media (max-width: 900px) { .ticket-panel { width: 100%; } }
+.grand { margin-top: 0.3rem; padding-top: 0.55rem; border-top: 1.5px solid var(--mirestaurante-ink); color: var(--mirestaurante-ink); font-weight: 700; font-size: 1.05rem; }
+
+.modality { display: grid; grid-template-columns: 1fr 1fr; gap: 0.2rem; padding: 0.2rem; border-radius: 0.8rem; background: color-mix(in srgb, var(--mirestaurante-ink) 7%, transparent); }
+.modality button {
+  min-height: 2.6rem;
+  border: none;
+  border-radius: 0.6rem;
+  background: transparent;
+  color: var(--mirestaurante-muted);
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.modality button[aria-pressed="true"] { background: var(--mirestaurante-panel-elevated); color: var(--mirestaurante-ink); box-shadow: 0 1px 2px rgba(27, 24, 20, 0.1); }
+
+.send {
+  width: 100%;
+  min-height: 3.35rem;
+  border: none;
+  border-radius: 0.85rem;
+  background: var(--tomato);
+  color: #fff;
+  font-weight: 700;
+  font-size: 1.02rem;
+  cursor: pointer;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.25) inset, 0 6px 18px -6px rgba(208, 55, 31, 0.6);
+  touch-action: manipulation;
+  transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1), background-color 160ms ease;
+}
+.send:active:not(:disabled) { transform: scale(0.98); }
+.send:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
+@media (hover: hover) and (pointer: fine) {
+  .send:hover:not(:disabled) { background: #bb2f19; }
+}
+.msg { margin: 0; font-size: 0.85rem; font-weight: 600; color: var(--mirestaurante-success); text-align: center; }
+.msg.error { color: var(--mirestaurante-danger); }
+button:focus-visible, .note:focus-visible { outline: 2.5px solid var(--tomato); outline-offset: 2px; }
 </style>

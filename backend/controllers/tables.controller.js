@@ -12,6 +12,30 @@ function mapMesa(mesa) {
   };
 }
 
+/**
+ * Campos de aviso al mesero cuando cambia la asignación de una mesa.
+ * Se avisa cuando la mesa queda ocupada con un mesero nuevo (la hostess sienta
+ * clientes o cambia de mesero). Si quien asigna es el propio mesero, no hay aviso.
+ * Al liberar la mesa se limpia todo.
+ */
+function assignmentPatch(current, patch, { username, cellphone } = {}, now = new Date()) {
+  if (patch.disponible === true) {
+    return { asignadaEn: null, asignadaPor: null, avisoVisto: null, personas: null };
+  }
+  const out = {};
+  const busy = patch.disponible === false || (patch.disponible === undefined && current.disponible === false);
+  const waiter = patch.mesero !== undefined ? patch.mesero : current.mesero;
+  const seated = patch.disponible === false && current.disponible !== false;
+  const changedWaiter = Boolean(patch.mesero) && patch.mesero !== current.mesero;
+  if (busy && waiter && (seated || changedWaiter)) {
+    out.asignadaEn = now;
+    out.asignadaPor = username || null;
+    out.avisoVisto = Boolean(cellphone) && String(cellphone) === String(waiter);
+  }
+  if (patch.avisoVisto === true) out.avisoVisto = true;
+  return out;
+}
+
 async function list(req, res) {
   try {
     const mesas = await db.Getmesas(req.tenantId);
@@ -56,6 +80,7 @@ async function create(req, res) {
       disponible: body.disponible !== undefined ? Boolean(body.disponible) : true,
       mesero: body.mesero || null,
       personaTitular: body.personaTitular || null,
+      personas: body.personas != null ? Number(body.personas) : null,
       posX: body.posX != null ? Number(body.posX) : null,
       posY: body.posY != null ? Number(body.posY) : null,
     };
@@ -77,10 +102,22 @@ async function update(req, res) {
       mesero: body.mesero,
       nombre: body.nombre,
       capacidad: body.capacidad != null ? Number(body.capacidad) : undefined,
+      personas: body.personas != null ? Number(body.personas) : undefined,
+      avisoVisto: body.avisoVisto === true ? true : undefined,
       posX: body.posX != null ? Number(body.posX) : undefined,
       posY: body.posY != null ? Number(body.posY) : undefined,
     };
     Object.keys(patch).forEach((k) => patch[k] === undefined && delete patch[k]);
+
+    const assigning = patch.disponible !== undefined || patch.mesero !== undefined || patch.avisoVisto;
+    if (assigning) {
+      const current = await db.GetMesaById(req.params.id, req.tenantId);
+      if (!current) return res.status(404).send('Mesa no existe');
+      const me = patch.mesero || patch.disponible === false
+        ? await db.FindUserByUsername(req.user?.username, req.tenantId)
+        : null;
+      Object.assign(patch, assignmentPatch(current, patch, { username: req.user?.username, cellphone: me?.cellphone }));
+    }
 
     const result = await db.UpdateStatusMesa(req.params.id, patch, req.tenantId);
     if (!result || result.matchedCount === 0) {
@@ -107,4 +144,4 @@ async function remove(req, res) {
   }
 }
 
-module.exports = { list, getById, create, update, remove };
+module.exports = { list, getById, create, update, remove, assignmentPatch };

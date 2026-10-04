@@ -213,11 +213,20 @@ const ResetPassword = async (req, res) => {
 };
 
 const Me = async (req, res) => {
+  let user = null;
+  try {
+    user = await db.FindUserByUsername(req.user.username, req.tenantId);
+  } catch {
+    // Sin datos extra el resto de /me sigue sirviendo
+  }
   return res.status(200).json({
     username: req.user.username,
     role: req.user.role,
     tenantId: req.tenantId,
     roles: ROLES,
+    name: user?.name || '',
+    lastName: user?.lastName || '',
+    cellphone: user?.cellphone || '',
   });
 };
 

@@ -7,7 +7,7 @@
           <h1 id="floor-title">Mesas</h1>
         </div>
         <div class="head-actions">
-          <div class="seg" role="group" aria-label="Vista">
+          <div v-if="!isPhone" class="seg" role="group" aria-label="Vista">
             <button type="button" :aria-pressed="view === 'lista'" @click="setView('lista')">Mesas</button>
             <button type="button" :aria-pressed="view === 'plano'" @click="setView('plano')">Plano</button>
           </div>
@@ -67,22 +67,23 @@
 
       <!-- Mesas (tarjetas) -->
       <template v-else-if="view === 'lista'">
-        <ul v-if="visibleMesas.length" class="tiles">
+        <ul v-if="visibleMesas.length" class="tiles" :class="{ intro }">
           <li v-for="(mesa, i) in visibleMesas" :key="mesa.id" :style="{ '--i': i }">
             <button
               type="button"
               class="tile"
-              :class="`st-${info(mesa).state}`"
+              :class="[`st-${info(mesa).state}`, { fresh: info(mesa).fresh, mine: isMine(mesa) }]"
               :aria-label="tableLabel(mesa)"
               @click="abrirMesa(mesa)"
             >
               <span class="tile-top">
                 <span class="tile-num">{{ shortName(mesa.nombre) }}</span>
-                <span v-if="info(mesa).since" class="tile-time">{{ elapsed(info(mesa).since) }}</span>
+                <span v-if="info(mesa).fresh" class="tile-new">Nueva</span>
+                <span v-else-if="info(mesa).since" class="tile-time">{{ elapsed(info(mesa).since) }}</span>
               </span>
               <span class="tile-state"><i aria-hidden="true"></i>{{ STATES[info(mesa).state] }}<small v-if="info(mesa).state === 'free'"> · {{ mesa.capacidad }} pers.</small></span>
               <span v-if="info(mesa).state !== 'free'" class="tile-meta">
-                <span>{{ mesa.capacidad }} pers.<template v-if="waiterFirst(mesa)"> · {{ waiterFirst(mesa) }}</template></span>
+                <span>{{ partyLabel(mesa) }}<template v-if="waiterFirst(mesa)"> · {{ waiterFirst(mesa) }}</template></span>
                 <b v-if="info(mesa).total">{{ money(info(mesa).total) }}</b>
               </span>
             </button>
@@ -121,6 +122,7 @@
             :class="[
               `st-${info(mesa).state}`,
               shapeClass(mesa.capacidad),
+              { fresh: info(mesa).fresh },
               { dragging: drag?.id === mesa.id, 'edit-mode': editMap, dim: !editMap && !matches(mesa) },
             ]"
             :style="[pieceStyle(mesa), { '--i': i }]"
@@ -139,7 +141,6 @@
           </button>
         </div>
         </div>
-        <p class="swipe-hint" aria-hidden="true">Desliza para ver todo el salón →</p>
         <ul ref="legendRef" class="legend" aria-hidden="true">
           <li v-for="(label, st) in STATES" :key="st" :class="`lg-${st}`">{{ label }}</li>
         </ul>
@@ -155,7 +156,7 @@
                 <h2 id="sheet-title">{{ sel.nombre }}</h2>
                 <p class="sheet-sub">
                   <span class="state-pill" :class="`st-${selInfo.state}`">{{ STATES[selInfo.state] }}</span>
-                  <span>{{ sel.capacidad }} pers.<template v-if="selInfo.since"> · {{ elapsed(selInfo.since) }}</template><template v-if="waiterName(sel)"> · {{ waiterName(sel) }}</template></span>
+                  <span>{{ partyLabel(sel) }}<template v-if="selInfo.since"> · {{ elapsed(selInfo.since) }}</template><template v-if="waiterName(sel)"> · {{ waiterName(sel) }}</template></span>
                 </p>
               </div>
               <button ref="closeBtn" type="button" class="icon-close" aria-label="Cerrar" @click="cerrarMesa">
@@ -180,26 +181,62 @@
               <p class="tk-total"><span>Total</span><b>{{ money(selInfo.total) }}</b></p>
             </div>
 
-            <div class="sheet-actions">
-              <template v-if="selInfo.state === 'free'">
-                <button type="button" class="btn btn-primary btn-lg" :disabled="busy" @click="ocuparMesa">Sentar clientes</button>
-                <button type="button" class="btn btn-soft btn-lg" @click="irAPedido">Tomar pedido</button>
-              </template>
-              <template v-else-if="selInfo.state === 'seated'">
-                <button type="button" class="btn btn-primary btn-lg" @click="irAPedido">Tomar pedido</button>
+            <!-- Sentar clientes (hostess, mesero o admin) -->
+            <form v-if="selInfo.state === 'free'" class="seat" @submit.prevent="ocuparMesa">
+              <div class="seat-row">
+                <span class="seat-label">Personas</span>
+                <div class="stepper">
+                  <button type="button" aria-label="Menos personas" :disabled="seatForm.personas <= 1" @click="seatForm.personas -= 1">−</button>
+                  <b aria-live="polite">{{ seatForm.personas }}</b>
+                  <button type="button" aria-label="Más personas" @click="seatForm.personas += 1">+</button>
+                </div>
+              </div>
+              <p v-if="seatForm.personas > Number(sel.capacidad)" class="seat-warn">Son más que los {{ sel.capacidad }} lugares de la mesa.</p>
+              <label class="field">
+                <span>Nombre <small>(opcional)</small></span>
+                <input v-model="seatForm.nombre" type="text" maxlength="40" autocomplete="off" enterkeyhint="done" placeholder="Ej. Familia Ruiz" />
+              </label>
+              <fieldset v-if="!isWaiter && waiters.length" class="field">
+                <legend>Mesero</legend>
+                <div class="waiter-pick">
+                  <label
+                    v-for="w in waiterOptions"
+                    :key="w.cellphone"
+                    class="wp"
+                    :class="{ on: seatForm.mesero === w.cellphone }"
+                  >
+                    <input v-model="seatForm.mesero" type="radio" name="mesero" :value="w.cellphone" class="sr-only" />
+                    <span class="wp-name">{{ w.name }} {{ (w.lastName || '').slice(0, 1) }}.</span>
+                    <span class="wp-load">{{ w.load === 1 ? '1 mesa' : `${w.load} mesas` }}</span>
+                    <span v-if="w.suggested" class="wp-tag">Sugerido</span>
+                  </label>
+                  <label class="wp" :class="{ on: !seatForm.mesero }">
+                    <input v-model="seatForm.mesero" type="radio" name="mesero" value="" class="sr-only" />
+                    <span class="wp-name">Sin mesero</span>
+                  </label>
+                </div>
+              </fieldset>
+              <button type="submit" class="btn btn-primary btn-lg" :disabled="busy">{{ seatLabel }}</button>
+              <button v-if="canOrder" type="button" class="btn btn-soft btn-lg" @click="irAPedido">Solo tomar pedido</button>
+            </form>
+
+            <div v-else class="sheet-actions">
+              <template v-if="selInfo.state === 'seated'">
+                <button v-if="canOrder" type="button" class="btn btn-primary btn-lg" @click="irAPedido">Tomar pedido</button>
                 <button type="button" class="btn btn-soft btn-lg" :disabled="busy" @click="desocuparMesa">Liberar mesa</button>
               </template>
               <template v-else-if="selInfo.state === 'ready'">
-                <button type="button" class="btn btn-basil btn-lg" :disabled="busy" @click="marcarServido">Marcar como servido</button>
-                <button type="button" class="btn btn-soft btn-lg" @click="irAPedido">Agregar al pedido</button>
+                <button v-if="canOrder" type="button" class="btn btn-basil btn-lg" :disabled="busy" @click="marcarServido">Marcar como servido</button>
+                <button v-if="canOrder" type="button" class="btn btn-soft btn-lg" @click="irAPedido">Agregar al pedido</button>
               </template>
               <template v-else-if="selInfo.state === 'kitchen'">
-                <button type="button" class="btn btn-primary btn-lg" @click="irAPedido">Agregar al pedido</button>
-                <button type="button" class="btn btn-soft btn-lg" @click="irACaja">Ver cuenta en caja</button>
+                <button v-if="canOrder" type="button" class="btn btn-primary btn-lg" @click="irAPedido">Agregar al pedido</button>
+                <button v-if="canCharge" type="button" class="btn btn-soft btn-lg" @click="irACaja">Ver cuenta en caja</button>
               </template>
               <template v-else>
-                <button type="button" class="btn btn-primary btn-lg" @click="irACaja">Cobrar {{ money(selInfo.total) }}</button>
-                <button type="button" class="btn btn-soft btn-lg" @click="irAPedido">Agregar al pedido</button>
+                <button v-if="canCharge" type="button" class="btn btn-primary btn-lg" @click="irACaja">Cobrar {{ money(selInfo.total) }}</button>
+                <button v-if="canOrder" type="button" class="btn btn-soft btn-lg" @click="irAPedido">Agregar al pedido</button>
+                <p v-if="!canCharge" class="hint">Cuando pidan la cuenta, avisa en caja para cobrar {{ money(selInfo.total) }}.</p>
               </template>
             </div>
 
@@ -287,8 +324,10 @@
 <script setup>
 import AppShell from '../components/AppShell.vue';
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import { apiService } from '../apiService.ts';
+import { hasRole, canAccessRoute } from '../authStore';
+import { alertsState, myPhone, startWaiterAlerts, ackTable } from '../waiterAlerts';
 
 const COLS = 12;
 const ROWS = 8;
@@ -308,7 +347,7 @@ const ORDER_STATUS = {
   ready: 'Listo',
   served: 'Servido',
 };
-const filterOptions = [
+const BASE_FILTERS = [
   { id: 'all', label: 'Todas' },
   { id: 'attention', label: 'Atender' },
   { id: 'free', label: 'Libres' },
@@ -323,6 +362,11 @@ const capOptions = [
 ];
 
 const router = useRouter();
+const route = useRoute();
+const isWaiter = hasRole('waiter');
+const canOrder = canAccessRoute('menu');
+const canCharge = canAccessRoute('orders');
+const seatForm = ref({ personas: 2, nombre: '', mesero: '' });
 const mapRef = ref(null);
 const scrollRef = ref(null);
 const legendRef = ref(null);
@@ -333,12 +377,18 @@ const mesas = ref([]);
 const orders = ref([]);
 const waiters = ref([]);
 const loading = ref(true);
+const intro = ref(true);
 const busy = ref(false);
 const now = ref(Date.now());
 const filter = ref('all');
-const view = ref(
-  typeof window !== 'undefined' && window.matchMedia('(max-width: 720px)').matches ? 'lista' : 'plano'
-);
+// En celular no hay plano: las tarjetas son la forma usable de ver el salón
+const phoneQuery = window.matchMedia('(max-width: 720px)');
+const isPhone = ref(phoneQuery.matches);
+const view = ref(isPhone.value ? 'lista' : 'plano');
+function onPhoneChange(e) {
+  isPhone.value = e.matches;
+  if (e.matches) setView('lista');
+}
 const modalActivo = ref(false);
 const modalAgregarMesa = ref(false);
 const nombreNuevaMesa = ref('');
@@ -379,38 +429,51 @@ const infoById = computed(() => {
     else if (!m.disponible) state = 'seated';
     const times = list.map((o) => new Date(o.createdAt).getTime()).filter(Number.isFinite);
     const total = list.reduce((sum, o) => sum + Number(o.total || 0), 0);
-    map.set(m.id, { state, orders: list, since: times.length ? Math.min(...times) : null, total });
+    const assignedAt = m.asignadaEn ? new Date(m.asignadaEn).getTime() : NaN;
+    if (Number.isFinite(assignedAt) && state === 'seated') times.push(assignedAt);
+    const fresh = !m.disponible && m.avisoVisto === false;
+    map.set(m.id, { state, orders: list, since: times.length ? Math.min(...times) : null, total, fresh });
   }
   return map;
 });
 
-const EMPTY_INFO = { state: 'free', orders: [], since: null, total: 0 };
+const EMPTY_INFO = { state: 'free', orders: [], since: null, total: 0, fresh: false };
+
+function isMine(mesa) {
+  return Boolean(myPhone.value) && String(mesa.mesero || '') === myPhone.value;
+}
+
+const filterOptions = computed(() =>
+  myPhone.value ? [{ id: 'mine', label: 'Mías' }, ...BASE_FILTERS] : BASE_FILTERS
+);
 function info(mesa) {
   return infoById.value.get(mesa.id) || EMPTY_INFO;
 }
 
 function matches(mesa) {
   const st = info(mesa).state;
-  if (filter.value === 'attention') return st === 'seated' || st === 'ready';
+  if (filter.value === 'mine') return isMine(mesa);
+  if (filter.value === 'attention') return st === 'seated' || st === 'ready' || info(mesa).fresh;
   if (filter.value === 'free') return st === 'free';
   if (filter.value === 'busy') return st !== 'free';
   return true;
 }
 
 const counts = computed(() => {
-  const c = { all: 0, attention: 0, free: 0, busy: 0, seats: 0, guests: 0, open: 0 };
+  const c = { all: 0, mine: 0, attention: 0, free: 0, busy: 0, seats: 0, guests: 0, open: 0 };
   for (const m of mesas.value) {
     const i = info(m);
     const cap = Number(m.capacidad) || 0;
     c.all += 1;
+    if (isMine(m)) c.mine += 1;
     c.seats += cap;
     c.open += i.total;
     if (i.state === 'free') c.free += 1;
     else {
       c.busy += 1;
-      c.guests += cap;
+      c.guests += Number(m.personas) || cap;
     }
-    if (i.state === 'seated' || i.state === 'ready') c.attention += 1;
+    if (i.state === 'seated' || i.state === 'ready' || i.fresh) c.attention += 1;
   }
   return c;
 });
@@ -464,6 +527,34 @@ function waiterName(mesa) {
 function waiterFirst(mesa) {
   return waiterOf(mesa)?.name || '';
 }
+
+function partyLabel(mesa) {
+  if (!mesa.disponible && (mesa.personaTitular || mesa.personas)) {
+    const who = mesa.personaTitular ? `${mesa.personaTitular} · ` : '';
+    return `${who}${mesa.personas || mesa.capacidad} pers.`;
+  }
+  return `${mesa.capacidad} pers.`;
+}
+
+// Mesas ocupadas por mesero, para sugerir al menos cargado
+const waiterOptions = computed(() => {
+  const load = new Map();
+  for (const m of mesas.value) {
+    if (!m.disponible && m.mesero) load.set(String(m.mesero), (load.get(String(m.mesero)) || 0) + 1);
+  }
+  const list = waiters.value.map((w) => ({ ...w, load: load.get(String(w.cellphone)) || 0 }));
+  const min = Math.min(...list.map((w) => w.load));
+  const firstMin = list.find((w) => w.load === min);
+  return list
+    .map((w) => ({ ...w, suggested: list.length > 1 && w === firstMin }))
+    .sort((a, b) => a.load - b.load);
+});
+
+const seatLabel = computed(() => {
+  if (isWaiter) return 'Sentar clientes';
+  const w = waiters.value.find((x) => String(x.cellphone) === String(seatForm.value.mesero));
+  return w ? `Sentar y avisar a ${w.name}` : 'Sentar clientes';
+});
 
 function tableLabel(mesa) {
   const i = info(mesa);
@@ -682,6 +773,19 @@ async function abrirMesa(mesa) {
   lastFocus = document.activeElement;
   selId.value = mesa.id;
   selectedWaiterPhone.value = waiterPhone(mesa);
+  // Sentar: el mesero se asigna a sí mismo; la hostess parte del dueño de la sección o del sugerido
+  const suggested = waiterOptions.value.find((w) => w.suggested)?.cellphone || waiterOptions.value[0]?.cellphone || '';
+  seatForm.value = {
+    personas: Math.min(2, Number(mesa.capacidad) || 2),
+    nombre: '',
+    mesero: isWaiter ? myPhone.value : waiterPhone(mesa) || suggested,
+  };
+  // Abrir una mesa nueva propia cuenta como "enterado"
+  if (info(mesa).fresh && isMine(mesa)) {
+    const idx = mesas.value.findIndex((m) => m.id === mesa.id);
+    if (idx >= 0) mesas.value[idx] = { ...mesas.value[idx], avisoVisto: true };
+    ackTable(mesa.id);
+  }
   waiterSaved.value = false;
   modalActivo.value = true;
   await nextTick();
@@ -863,11 +967,18 @@ async function guardarMesero() {
 }
 
 async function ocuparMesa() {
+  const f = seatForm.value;
+  const mesero = f.mesero || null;
   const ok = await updateSelected({
     disponible: false,
-    mesero: selectedWaiterPhone.value || waiterPhone(sel.value) || null,
+    mesero,
+    personaTitular: f.nombre.trim() || null,
+    personas: f.personas,
   });
-  if (ok) cerrarMesa();
+  if (!ok) return;
+  const w = waiters.value.find((x) => String(x.cellphone) === String(mesero));
+  showToast(w && !isWaiter ? `${sel.value.nombre} asignada a ${w.name}. Ya le avisamos.` : `${sel.value.nombre} ocupada`);
+  cerrarMesa();
 }
 
 async function desocuparMesa() {
@@ -890,15 +1001,34 @@ async function marcarServido() {
   }
 }
 
+function openFromRoute() {
+  const id = route.query.mesa;
+  if (!id) return;
+  const mesa = mesas.value.find((m) => m.id === id);
+  if (mesa) abrirMesa(mesa);
+  router.replace({ query: { ...route.query, mesa: undefined } });
+}
+
+watch(() => route.query.mesa, () => !loading.value && openFromRoute());
+
+// El mesero ve primero sus mesas
+watch(myPhone, (p) => {
+  if (p && isWaiter && filter.value === 'all') filter.value = 'mine';
+}, { immediate: true });
+
 onMounted(async () => {
   window.addEventListener('keydown', onKeydown);
+  startWaiterAlerts();
   window.addEventListener('resize', fitMap);
+  phoneQuery.addEventListener('change', onPhoneChange);
   try {
     await Promise.all([loadTables(), loadOrders(), loadWaiters()]);
   } catch {
     showToast('No se pudieron cargar las mesas', 'error');
   }
   loading.value = false;
+  setTimeout(() => { intro.value = false; }, 700);
+  openFromRoute();
   pollTimer = setInterval(refresh, POLL_MS);
   clockTimer = setInterval(() => { now.value = Date.now(); }, 30000);
 });
@@ -906,6 +1036,7 @@ onMounted(async () => {
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown);
   window.removeEventListener('resize', fitMap);
+  phoneQuery.removeEventListener('change', onPhoneChange);
   clearInterval(pollTimer);
   clearInterval(clockTimer);
   clearTimeout(toastTimer);
@@ -1104,7 +1235,8 @@ onUnmounted(() => {
   grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));
   gap: 0.6rem;
 }
-.tiles li { animation: rise 260ms var(--ease-out) backwards; animation-delay: calc(min(var(--i, 0), 12) * 22ms); }
+/* Entrada escalonada solo al abrir la pantalla; cambiar de filtro es instantáneo */
+.tiles.intro li { animation: rise 260ms var(--ease-out) backwards; animation-delay: calc(min(var(--i, 0), 12) * 22ms); }
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
 
 .tile {
@@ -1188,10 +1320,41 @@ onUnmounted(() => {
 
 .tile.st-eating .tile-state { color: var(--mirestaurante-muted); }
 
+.tile-new {
+  padding: 0.15rem 0.45rem;
+  border-radius: 0.3rem;
+  background: var(--tomato);
+  color: #fff;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  animation: blink 1.4s ease-in-out infinite;
+}
+.tile.fresh { border-color: var(--tomato); box-shadow: 0 0 0 3px color-mix(in srgb, var(--tomato) 18%, transparent); }
+.tile.mine:not(.st-free)::before {
+  content: "";
+  position: absolute;
+  left: -1.5px;
+  top: 0.9rem;
+  bottom: 0.9rem;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--mirestaurante-ink);
+}
+.table-piece.fresh .table-top { box-shadow: 0 0 0 2px var(--tomato); }
+.table-piece.fresh .table-top::before {
+  content: "";
+  position: absolute;
+  inset: -1.5px;
+  border-radius: inherit;
+  border: 2px solid var(--tomato);
+  animation: ring-lg 1.4s var(--ease-out) infinite;
+}
+
 .tile.sk { min-height: 7.4rem; border-style: dashed; background: transparent; animation: pulse 1.1s ease-in-out infinite alternate; cursor: default; }
 @keyframes pulse { to { opacity: 0.45; } }
 
-.swipe-hint { display: none; margin: -0.2rem 0 0; font-family: var(--mono); font-size: 0.72rem; color: var(--mirestaurante-muted); }
 .no-match { color: var(--mirestaurante-muted); text-align: center; padding: 2.5rem 1rem; }
 
 /* —— Plano: la pizarra de la landing ——
@@ -1481,6 +1644,62 @@ onUnmounted(() => {
 
 .sheet-actions { display: grid; gap: 0.5rem; }
 
+/* Sentar clientes */
+.seat { display: grid; gap: 0.85rem; }
+.seat-row { display: flex; justify-content: space-between; align-items: center; }
+.seat-label { font-weight: 600; font-size: 0.88rem; }
+.seat-warn { margin: -0.4rem 0 0; font-size: 0.8rem; color: var(--mirestaurante-warning); }
+.field small { font-weight: 500; color: var(--mirestaurante-muted); }
+.stepper { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.2rem; border-radius: 0.85rem; border: 1.5px solid var(--mirestaurante-line); }
+.stepper button {
+  width: 2.75rem;
+  height: 2.75rem;
+  border: none;
+  border-radius: 0.65rem;
+  background: color-mix(in srgb, var(--mirestaurante-ink) 6%, transparent);
+  color: var(--mirestaurante-ink);
+  font-size: 1.3rem;
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform 120ms var(--ease-out);
+}
+.stepper button:active:not(:disabled) { transform: scale(0.92); }
+.stepper button:disabled { opacity: 0.35; }
+.stepper b { min-width: 2.2rem; text-align: center; font-family: var(--mono); font-size: 1.15rem; }
+.waiter-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); gap: 0.4rem; }
+.wp {
+  position: relative;
+  display: grid;
+  gap: 0.1rem;
+  min-height: 3.2rem;
+  padding: 0.5rem 0.7rem;
+  border: 1.5px solid var(--mirestaurante-line);
+  border-radius: 0.8rem;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: border-color 150ms ease, background-color 150ms ease, transform 140ms var(--ease-out);
+}
+.wp:active { transform: scale(0.97); }
+.wp.on { border-color: var(--tomato); background: color-mix(in srgb, var(--tomato) 8%, transparent); }
+.wp:focus-within { outline: 2.5px solid var(--tomato); outline-offset: 2px; }
+.wp-name { font-weight: 700; font-size: 0.9rem; }
+.wp-load { font-family: var(--mono); font-size: 0.7rem; color: var(--mirestaurante-muted); }
+.wp-tag {
+  position: absolute;
+  top: -0.5rem;
+  right: 0.5rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 0.25rem;
+  background: var(--basil);
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .more { border-top: 1px solid var(--mirestaurante-line); padding-top: 0.25rem; }
 .more summary {
   min-height: 2.75rem;
@@ -1593,14 +1812,7 @@ onUnmounted(() => {
 
 /* —— Celular —— */
 @media (max-width: 720px) {
-  /* Plano en celular: tamaño fijo, celdas de 60px, se desplaza con el dedo */
-  .map-scroll { height: auto; }
-  .floor-map { width: 45rem; height: 30rem; }
-  .edit-btn { padding: 0 0.75rem; font-size: 0.88rem; }
-  .swipe-hint { display: block; }
-  .floor-head { flex-wrap: wrap; align-items: flex-start; }
-  .head-actions { width: 100%; }
-  .head-actions .seg { margin-right: auto; }
+  .floor-head { align-items: center; }
   .btn-label { display: none; }
   .head-actions .btn-primary { width: 2.8rem; padding: 0; }
   .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
@@ -1617,7 +1829,7 @@ onUnmounted(() => {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tiles li, .table-piece, .tile.sk, .pulse::after, .tile.st-ready::after,
+  .tiles li, .table-piece, .tile.sk, .tile-new, .table-piece.fresh .table-top::before, .pulse::after, .tile.st-ready::after,
   .st-ready .table-top::after, .tile.st-kitchen .tile-state i { animation: none; }
   .sheet-enter-from .sheet, .sheet-leave-to .sheet { transform: none; }
   .toast-enter-from, .toast-leave-to { transform: translateX(-50%); }
