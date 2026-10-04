@@ -48,6 +48,9 @@ jobs:
           fi
           project_id=$(jq -r .id project.json)
           rm project.json
+          # Sitio público: sin pantalla de login de Vercel en producción
+          curl -sS -o /dev/null -w 'ssoProtection off → %{http_code}\n' -X PATCH -H "$auth" -H 'Content-Type: application/json' \
+            -d '{"ssoProtection":null}' "$api/v9/projects/$project_id?teamId=$VERCEL_SCOPE"
           mkdir -p .vercel
           printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_SCOPE" "$project_id" > .vercel/project.json
           echo "Proyecto $VERCEL_PROJECT → $project_id"
@@ -56,7 +59,7 @@ jobs:
         env:
           DATABASE_URI: ${{ secrets.DATABASE_URI }}
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
-          APP_URL: ${{ vars.APP_URL || 'https://mirestaurante.vercel.app' }}
+          APP_URL: ${{ vars.APP_URL || 'https://mirestaurante-ten.vercel.app' }}
         run: |
           vercel deploy --prod --yes --token="${{ secrets.VERCEL_TOKEN }}" \
             -e DATABASE_URI="$DATABASE_URI" \

@@ -146,7 +146,7 @@ Secrets del repositorio (Settings → Secrets and variables → Actions):
 - `DATABASE_URI`: conexión de MongoDB Atlas (ver abajo).
 - `SECRET_KEY`: valor largo y aleatorio para firmar sesiones.
 
-Variable opcional `APP_URL` si usas un dominio propio (por defecto `https://mirestaurante.vercel.app`).
+Variable opcional `APP_URL` si usas un dominio propio (por defecto `https://mirestaurante-ten.vercel.app`).
 
 ## Base de datos (producción)
 MiRestaurante usa el mismo cluster de MongoDB Atlas que MiTiendita (`cluster0.8z0wbpq.mongodb.net`), pero en
