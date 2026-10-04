@@ -333,10 +333,10 @@ import { useRouter, useRoute } from 'vue-router';
 import { apiService } from '../apiService.ts';
 import { hasRole, canAccessRoute } from '../authStore';
 import { alertsState, myPhone, startWaiterAlerts, ackTable } from '../waiterAlerts';
+import { bindLive } from '../live';
 
 const COLS = 12;
 const ROWS = 8;
-const POLL_MS = 15000;
 
 // Mismos estados que dibuja la landing
 const STATES = {
@@ -410,7 +410,8 @@ const dropTarget = ref(null);
 const skipClick = ref(false);
 const toast = ref(null);
 let toastTimer;
-let pollTimer;
+const live = bindLive(['tables', 'orders'], () => refresh());
+let staleWhileBusy = false;
 let clockTimer;
 let lastFocus = null;
 
@@ -736,14 +737,25 @@ async function loadWaiters() {
   }
 }
 
+// Llega un cambio (otro mesero, cocina, hostess…). Si justo estás arrastrando una mesa, editando el
+// plano o con una acción en curso, no se pisa lo que estás haciendo: se recuerda y se aplica al terminar.
 async function refresh() {
-  if (drag.value || editMap.value || busy.value || document.hidden) return;
+  if (drag.value || editMap.value || busy.value) {
+    staleWhileBusy = true;
+    return;
+  }
+  staleWhileBusy = false;
   try {
     await Promise.all([loadTables(), loadOrders()]);
   } catch {
-    // Reintenta en el siguiente ciclo
+    // Se conserva lo que ya hay en pantalla; el siguiente cambio vuelve a intentarlo
+    staleWhileBusy = true;
   }
 }
+
+watch([drag, editMap, busy], () => {
+  if (staleWhileBusy) refresh();
+});
 
 /* —— Interacción —— */
 
@@ -1042,15 +1054,16 @@ onMounted(async () => {
   loading.value = false;
   setTimeout(() => { intro.value = false; }, 700);
   openFromRoute();
-  pollTimer = setInterval(refresh, POLL_MS);
   clockTimer = setInterval(() => { now.value = Date.now(); }, 30000);
+  // Se suscribe después de la primera carga y se recarga una vez al engancharse (barato),
+  // para no perder cambios ocurridos justo durante ese primer arranque.
 });
 
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown);
   window.removeEventListener('resize', fitMap);
   phoneQuery.removeEventListener('change', onPhoneChange);
-  clearInterval(pollTimer);
+  live.stop();
   clearInterval(clockTimer);
   clearTimeout(toastTimer);
 });

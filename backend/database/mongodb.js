@@ -207,8 +207,32 @@ async function FindUserByResetToken(token) {
   });
 }
 
+// ——— Sincronización en vivo ———
+// Un contador por canal y por negocio. Cada escritura de pedidos, mesas o lista de espera
+// lo incrementa; las pantallas consultan GET /sync (una sola lectura barata) y recargan
+// solo lo que cambió. Un fallo aquí nunca debe romper la operación que lo originó.
+async function touchSync(tenantId, ...channels) {
+  if (!tenantId || !channels.length) return;
+  try {
+    await dbConnection.collection('sync').updateOne(
+      { _id: String(tenantId) },
+      { $inc: Object.fromEntries(channels.map((c) => [c, 1])), $set: { updatedAt: new Date() } },
+      { upsert: true }
+    );
+  } catch (err) {
+    console.error('[sync] no se pudo registrar el cambio:', err.message);
+  }
+}
+async function GetSyncVersions(tenantId) {
+  const doc = await dbConnection
+    .collection('sync')
+    .findOne({ _id: String(tenantId) }, { projection: { _id: 0, orders: 1, tables: 1, waitlist: 1 } });
+  return { orders: doc?.orders || 0, tables: doc?.tables || 0, waitlist: doc?.waitlist || 0 };
+}
+
 async function AddMesa(data) {
   const result = await dbConnection.collection('mesas').insertOne(data);
+  await touchSync(data.tenantId, 'tables');
   return withMesaId(await dbConnection.collection('mesas').findOne({ _id: result.insertedId }));
 }
 async function UpdateStatusMesa(id, data, tenantId) {
@@ -226,6 +250,7 @@ async function UpdateStatusMesa(id, data, tenantId) {
       { $set: clean }
     );
   }
+  if (result.matchedCount) await touchSync(tenantId, 'tables');
   return result;
 }
 async function Getmesas(tenantId) {
@@ -258,16 +283,23 @@ async function DeleteMesa(id, tenantId) {
   const byOid = oidFilter(id, tenantId);
   if (byOid) {
     const byOidRes = await dbConnection.collection('mesas').deleteOne(byOid);
-    if (byOidRes.deletedCount) return byOidRes;
+    if (byOidRes.deletedCount) {
+      await touchSync(tenantId, 'tables');
+      return byOidRes;
+    }
   }
-  return await dbConnection.collection('mesas').deleteOne({
+  const result = await dbConnection.collection('mesas').deleteOne({
     numero: parseInt(id, 10),
     ...(tenantId ? { tenantId } : {}),
   });
+  if (result.deletedCount) await touchSync(tenantId, 'tables');
+  return result;
 }
 async function CloseMesas(tenantId) {
   const filter = tenantId ? { tenantId } : {};
-  return await dbConnection.collection('mesas').updateMany(filter, { $set: { disponible: false, personaTitular: null } });
+  const result = await dbConnection.collection('mesas').updateMany(filter, { $set: { disponible: false, personaTitular: null } });
+  await touchSync(tenantId, 'tables');
+  return result;
 }
 
 async function GetMenus(tenantId) {
@@ -349,7 +381,9 @@ async function UpdateWaiter(id, data, tenantId) {
 }
 
 async function AddWaitList(data) {
-  return await dbConnection.collection('waitlist').insertOne(data);
+  const result = await dbConnection.collection('waitlist').insertOne(data);
+  await touchSync(data.tenantId, 'waitlist');
+  return result;
 }
 async function GetWaitList(tenantId) {
   const filter = tenantId ? { tenantId } : {};
@@ -359,7 +393,9 @@ async function GetWaitListByNumber(number, tenantId) {
   return await dbConnection.collection('waitlist').findOne({ cellphone: parseInt(number, 10), ...(tenantId ? { tenantId } : {}) });
 }
 async function DeleteWaitList(id, tenantId) {
-  return await dbConnection.collection('waitlist').deleteOne({ telefono: id, ...(tenantId ? { tenantId } : {}) });
+  const result = await dbConnection.collection('waitlist').deleteOne({ telefono: id, ...(tenantId ? { tenantId } : {}) });
+  if (result.deletedCount) await touchSync(tenantId, 'waitlist');
+  return result;
 }
 
 async function GetSettings(tenantId) {
@@ -387,6 +423,7 @@ async function GetOrderById(id, tenantId) {
 }
 async function CreateOrder(data) {
   const result = await dbConnection.collection('orders').insertOne(data);
+  await touchSync(data.tenantId, 'orders');
   return withId(await dbConnection.collection('orders').findOne({ _id: result.insertedId }));
 }
 async function UpdateOrder(id, data, tenantId) {
@@ -395,6 +432,7 @@ async function UpdateOrder(id, data, tenantId) {
   const clean = { ...data };
   delete clean.id; delete clean._id;
   await dbConnection.collection('orders').updateOne(filter, { $set: clean });
+  await touchSync(tenantId, 'orders');
   return GetOrderById(id, tenantId);
 }
 async function GetOrdersByCashSession(sessionId, tenantId) {
@@ -436,6 +474,7 @@ async function GetCashSessionById(id, tenantId) {
 }
 async function CreateCashSession(data) {
   const result = await dbConnection.collection('cash_sessions').insertOne(data);
+  await touchSync(data.tenantId, 'orders');
   return withId(await dbConnection.collection('cash_sessions').findOne({ _id: result.insertedId }));
 }
 async function UpdateCashSession(id, data, tenantId) {
@@ -444,6 +483,7 @@ async function UpdateCashSession(id, data, tenantId) {
   const clean = { ...data };
   delete clean.id; delete clean._id;
   await dbConnection.collection('cash_sessions').updateOne(filter, { $set: clean });
+  await touchSync(tenantId, 'orders');
   return GetCashSessionById(id, tenantId);
 }
 
@@ -451,6 +491,7 @@ module.exports = {
   ensureConnection,
   CreateTenant, GetTenantById, UpdateTenant, ListTenants, CountUsersByTenant, GetTenantByMpPreapprovalId,
   CreateUser, FindUserByEmail, LoginUsuario, FindUserByUsername, UpdateUserById, FindUserByResetToken,
+  touchSync, GetSyncVersions,
   GetUsersByTenant, GetUserByIdAndTenant, CountUsersByRole, DeleteUserByIdAndTenant,
   AddMesa, UpdateStatusMesa, Getmesas, GetMesaFreeWaiter, GetMesaById, DeleteMesa, CloseMesas, GetNextMesaNumero,
   AddWaiter, GetWaiters, GetWaiterByCellphone, GetWaiterByDisponibility, DeleteWaiter, UpdateWaiter,

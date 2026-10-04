@@ -9,6 +9,16 @@
         </div>
       </div>
       <div class="top-actions">
+        <span
+          v-if="live.status !== 'idle'"
+          class="live-badge"
+          :class="live.status"
+          role="status"
+          :title="live.status === 'live' ? 'Los cambios llegan solos' : 'Sin conexión; reintentando…'"
+        >
+          <span class="live-dot" aria-hidden="true"></span>
+          <span class="live-text">{{ live.status === 'live' ? 'En vivo' : 'Reconectando…' }}</span>
+        </span>
         <span class="clock">{{ clock }}</span>
         <button
           type="button"
@@ -96,6 +106,7 @@ import { venueStore } from "../venueStore";
 import { themeStore, toggleUiTheme } from "../themeStore";
 import { clearSession, canAccessRoute, hasRole } from "../authStore";
 import { apiService } from "../apiService";
+import { liveState as live } from "../live";
 import {
   alertsState,
   waiterAlerts,
@@ -300,6 +311,35 @@ onUnmounted(() => clearInterval(timer));
   justify-content: flex-end;
 }
 
+.live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 1.7rem;
+  padding: 0 0.7rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--mirestaurante-topbar-text);
+}
+.live-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: #3ddc84;
+  box-shadow: 0 0 0 0 rgba(61, 220, 132, 0.6);
+  animation: live-pulse 2s ease-out infinite;
+}
+.live-badge.reconnecting { background: rgba(255, 170, 60, 0.2); }
+.live-badge.reconnecting .live-dot { background: #ffb23c; animation: none; }
+@keyframes live-pulse {
+  70% { box-shadow: 0 0 0 0.45rem rgba(61, 220, 132, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(61, 220, 132, 0); }
+}
+@media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } }
+@media (max-width: 480px) { .live-text { display: none; } }
 .clock {
   font-variant-numeric: tabular-nums;
   font-weight: 600;

@@ -1,13 +1,15 @@
 /**
  * Avisos para el mesero: mesas que le asignó la hostess y pedidos listos de sus mesas.
  * Un solo sondeo para toda la app (AppShell se monta en cada pantalla).
- * ponytail: sondeo cada 8 s; con sockets/push (Vercel no los sostiene) sería instantáneo.
+ * Se entera de los cambios por el sondeo compartido (live.js, ≤ 2 s), incluso con la app en segundo
+ * plano si el mesero dio permiso a las notificaciones.
  */
 import { reactive, computed } from "vue";
 import { apiService } from "./apiService";
 import { hasRole } from "./authStore";
+import { bindLive } from "./live";
+import { beep, resumeAudio } from "./sound";
 
-const POLL_MS = 8000;
 const SEEN_KEY = "mirestaurante_ready_seen";
 
 function loadSeen() {
@@ -27,8 +29,8 @@ export const alertsState = reactive({
 });
 
 const announced = new Set();
-let timer = null;
-let audio = null;
+let liveBinding = null;
+let starting = false;
 
 export const myPhone = computed(() => String(alertsState.me?.cellphone || ""));
 
@@ -51,26 +53,6 @@ export const waiterAlerts = computed(() => {
   }
   return out.sort((a, b) => new Date(b.at) - new Date(a.at));
 });
-
-function beep() {
-  try {
-    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
-    const t = audio.currentTime;
-    [880, 1175].forEach((freq, i) => {
-      const osc = audio.createOscillator();
-      const gain = audio.createGain();
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.0001, t + i * 0.16);
-      gain.gain.exponentialRampToValueAtTime(0.25, t + i * 0.16 + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.16 + 0.14);
-      osc.connect(gain).connect(audio.destination);
-      osc.start(t + i * 0.16);
-      osc.stop(t + i * 0.16 + 0.15);
-    });
-  } catch {
-    // Sin audio (navegador sin permiso aún): queda la vibración y el aviso visual
-  }
-}
 
 export function alertText(a) {
   const t = a.table;
@@ -112,25 +94,39 @@ async function poll(silent = false) {
   }
 }
 
-/** Arranca el sondeo una sola vez, solo para meseros. */
+function onVisible() {
+  if (liveBinding && !document.hidden) poll();
+}
+
+/** Se suscribe a los cambios una sola vez, solo para meseros. */
 export async function startWaiterAlerts() {
-  if (timer || !hasRole("waiter")) return;
-  timer = setInterval(() => poll(), POLL_MS);
-  // El audio solo puede arrancar tras un toque del usuario
-  window.addEventListener("pointerdown", () => audio?.resume?.(), { once: true });
-  document.addEventListener("visibilitychange", () => timer && !document.hidden && poll());
+  if (liveBinding || starting || !hasRole("waiter")) return;
+  starting = true;
   try {
-    alertsState.me = await apiService.me();
-  } catch {
-    alertsState.me = null;
+    // El audio solo puede arrancar tras un toque del usuario
+    window.addEventListener("pointerdown", resumeAudio, { once: true });
+    document.addEventListener("visibilitychange", onVisible);
+    try {
+      alertsState.me = await apiService.me();
+    } catch {
+      alertsState.me = null;
+    }
+    // Con la pestaña oculta solo se sigue consultando si hay permiso para avisar
+    liveBinding = bindLive(["tables", "orders"], () => poll(), {
+      background: () => alertsState.permission === "granted",
+    });
+    await liveBinding.ready;
+    // Lo que ya estaba pendiente al abrir la app no suena, solo se muestra
+    await poll(true);
+  } finally {
+    starting = false;
   }
-  // Lo que ya estaba pendiente al abrir la app no suena, solo se muestra
-  await poll(true);
 }
 
 export function stopWaiterAlerts() {
-  clearInterval(timer);
-  timer = null;
+  liveBinding?.stop();
+  liveBinding = null;
+  document.removeEventListener("visibilitychange", onVisible);
   alertsState.me = null;
   announced.clear();
 }

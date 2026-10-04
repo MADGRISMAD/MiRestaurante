@@ -72,7 +72,8 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
+import { bindLive } from "../live";
 import AppShell from "../components/AppShell.vue";
 import { apiService } from "../apiService";
 import { labelOf, orderStatusLabel } from "../labels";
@@ -108,15 +109,28 @@ function statusText(s) {
   return labelOf(orderStatusLabel, s);
 }
 
+// silent: recarga automática; si algo falla, se deja lo que ya había en pantalla
+async function load(silent = false) {
+  const keep = (fallback) => (silent ? undefined : fallback);
+  const [t, o, w, wl] = await Promise.allSettled([
+    apiService.getTables(),
+    apiService.getOrders(),
+    apiService.getWaiters(),
+    apiService.getWaitlist(),
+  ]);
+  const val = (r, fallback) => (r.status === "fulfilled" ? r.value : keep(fallback));
+  const tv = val(t, []); if (tv !== undefined) tables.value = tv || [];
+  const ov = val(o, []); if (ov !== undefined) orders.value = ov || [];
+  const wv = val(w, []); if (wv !== undefined) waiters.value = wv || [];
+  const lv = val(wl, []); if (lv !== undefined) waitlistCount.value = Array.isArray(lv) ? lv.length : 0;
+}
+
+const live = bindLive(["orders", "tables", "waitlist"], () => load(true));
 onMounted(async () => {
-  try { tables.value = (await apiService.getTables()) || []; } catch { tables.value = []; }
-  try { orders.value = (await apiService.getOrders()) || []; } catch { orders.value = []; }
-  try { waiters.value = (await apiService.getWaiters()) || []; } catch { waiters.value = []; }
-  try {
-    const wl = await apiService.getWaitlist();
-    waitlistCount.value = Array.isArray(wl) ? wl.length : 0;
-  } catch { waitlistCount.value = 0; }
+  await live.ready;
+  await load();
 });
+onUnmounted(() => live.stop());
 </script>
 
 <style scoped>

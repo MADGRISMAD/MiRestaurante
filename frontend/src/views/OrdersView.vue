@@ -23,7 +23,7 @@
           </p>
           <div class="cash-actions">
             <label>Efectivo contado
-              <input v-model.number="countedCash" type="number" min="0" step="1" />
+              <input v-model.number="countedCash" type="number" min="0" step="1" @input="countedDirty = true" />
             </label>
             <button type="button" class="btn-danger" :disabled="cashBusy" @click="closeCash">
               Cerrar caja
@@ -113,7 +113,8 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
+import { bindLive } from "../live";
 import { useRouter } from "vue-router";
 import AppShell from "../components/AppShell.vue";
 import { apiService } from "../apiService";
@@ -135,6 +136,9 @@ const session = ref(null);
 const cashTotals = ref({ cash: 0, card: 0, transfer: 0, other: 0, total: 0 });
 const openingFloat = ref(0);
 const countedCash = ref(0);
+// Si el cajero ya tecleó el efectivo contado, una recarga automática no debe pisarlo
+const countedDirty = ref(false);
+const live = bindLive(["orders"], () => load(true));
 const cashBusy = ref(false);
 const cashMsg = ref("");
 const cashErr = ref("");
@@ -170,18 +174,21 @@ function modalityText(m) {
   return labelOf(modalityLabel, m);
 }
 
-async function loadCash() {
+// silent: recarga automática; si falla, deja en pantalla lo que ya había
+async function loadCash(silent = false) {
   try {
     const data = await apiService.getCashSession();
     cashOpen.value = Boolean(data.open);
     session.value = data.session;
     cashTotals.value = data.totals || { cash: 0, card: 0, transfer: 0, other: 0, total: 0 };
-    if (data.session) {
+    if (data.session && !countedDirty.value) {
       countedCash.value = Number(
         (data.session.openingFloat || 0) + (data.totals?.cash || 0)
       );
     }
+    if (!data.session) countedDirty.value = false;
   } catch {
+    if (silent) return;
     cashOpen.value = false;
     session.value = null;
   }
@@ -221,13 +228,13 @@ async function closeCash() {
   }
 }
 
-async function load() {
+async function load(silent = false) {
   try {
     orders.value = (await apiService.getOrders()) || [];
   } catch {
-    orders.value = [];
+    if (!silent) orders.value = [];
   }
-  await loadCash();
+  await loadCash(silent);
 }
 
 function openPay(o) {
@@ -262,7 +269,11 @@ async function setStatus(o, status) {
   if (idx >= 0) orders.value[idx] = updated;
 }
 
-onMounted(load);
+onMounted(async () => {
+  await live.ready;
+  await load();
+});
+onUnmounted(() => live.stop());
 </script>
 
 <style scoped>

@@ -174,6 +174,41 @@ de sesión existentes.
 
 Pruebas del backend: `npm --workspace backend test`.
 
+## Tiempo real
+Cocina, mesas, lista de espera, caja, panel y los avisos del mesero se actualizan solos: un cambio hecho en
+un dispositivo se ve en los demás en **≤ ~1.8 s** (medido: 1.1 s en promedio, 1.3 s en el peor caso en cocina),
+sin recargar y sin botón de actualizar. Arriba aparece el indicador **En vivo / Reconectando…**.
+
+**Cómo funciona.** El backend lleva un contador de cambios por negocio y por canal (`orders`, `tables`,
+`waitlist`) en la colección `sync`; `database/mongodb.js` lo incrementa en cada escritura de pedidos, mesas, lista
+de espera y caja. `GET /sync` devuelve esos tres números (una sola lectura). El frontend (`src/live.js` +
+`src/liveCore.js`) hace **un único sondeo para toda la app** cada 1.5 s mientras la pestaña está a la vista; cada
+pantalla se suscribe a sus canales y recarga sus datos solo cuando cambió uno de ellos.
+
+```js
+const live = bindLive(["orders"], () => load(true)); // en la pantalla
+onMounted(async () => { await live.ready; await load(); });
+onUnmounted(() => live.stop());
+```
+
+**Por qué sondeo y no WebSockets/SSE.** Vercel (funciones serverless) no sostiene WebSockets, y una conexión SSE
+abierta por dispositivo cuesta tiempo de función y no se puede probar sin desplegar. El sondeo de contadores
+funciona en cualquier hosting, se prueba por completo en local y baja el tráfico respecto a antes (cocina pedía
+la lista completa de pedidos cada 5 s; ahora solo descarga cuando algo cambió).
+
+**Comportamiento a conocer**
+- Pestaña oculta: se pausa (no gasta peticiones) y al volver se pone al día al instante. Los avisos del mesero
+  siguen aunque esté oculta si dio permiso a las notificaciones.
+- Sin red: reintenta con espera creciente (1.5 → 3 → 6 → 10 s), muestra "Reconectando…", conserva lo que ya
+  había en pantalla y al volver recarga lo que cambió durante la caída.
+- Cocina: la comanda nueva se resalta y suena (botón **Sonido: sí/no**, se recuerda por dispositivo).
+- Si estás arrastrando una mesa o editando el plano, el cambio recibido se aplica al terminar.
+
+**Costo y cómo crecer.** Cada dispositivo abierto hace ~40 peticiones/min a `/sync` (1 lectura a la base cada
+una). Con 5 dispositivos 12 h al día son ~4 millones de invocaciones al mes por restaurante: considera el plan
+de Vercel y el tamaño del cluster al sumar negocios. Si llega a pesar, solo hay que cambiar el transporte en
+`src/live.js` (SSE, Ably o Pusher): las pantallas únicamente usan `bindLive`/`subscribe`.
+
 ## Despliegue en Vercel (producción)
 Frontend (Vite) y backend (Express) se despliegan juntos en un solo proyecto de Vercel
 (`vercel.json` con `services`). El backend responde bajo `/api`, en el mismo dominio que el frontend.

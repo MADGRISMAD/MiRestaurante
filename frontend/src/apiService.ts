@@ -102,6 +102,9 @@ export const apiService = {
     return axios.delete(`/menus/${menuId}`).then((r) => r.status === 200);
   },
 
+  getSync() {
+    return axios.get('/sync').then((r) => r.data);
+  },
   getOrders() {
     return axios.get('/orders').then((r) => r.data);
   },

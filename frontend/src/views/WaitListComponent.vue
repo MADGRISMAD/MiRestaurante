@@ -75,8 +75,9 @@
 
 <script setup>
 import AppShell from '../components/AppShell.vue';
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { apiService } from '../apiService';
+import { bindLive } from '../live';
 
 const clientesEnEspera = ref([]);
 const modalAgregarCliente = ref(false);
@@ -91,9 +92,21 @@ const meseros = ref([]);
 const meseroSeleccionado = ref('');
 const personas = ref(2);
 
+// Otra hostess agrega o sienta a alguien: la lista se actualiza sola
+const live = bindLive(['waitlist'], () => reloadWaitlist());
 onMounted(async () => {
+  await live.ready;
   clientesEnEspera.value = (await GetWaitlist()) || [];
 });
+onUnmounted(() => live.stop());
+
+async function reloadWaitlist() {
+  try {
+    clientesEnEspera.value = await apiService.getWaitlist();
+  } catch (err) {
+    console.error(err); // se queda la lista que ya había
+  }
+}
 
 async function GetWaitlist() {
   try {

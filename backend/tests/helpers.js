@@ -7,10 +7,11 @@ const path = require('path');
 const { ObjectId } = require('mongodb');
 
 function createFakeDb() {
-  const state = { users: [], waiters: [], tenants: [{ id: 't1', name: 'T1', billingStatus: 'active', plan: 'basic' }, { id: 't2', name: 'T2', billingStatus: 'active', plan: 'basic' }] };
+  const state = { sync: {}, users: [], waiters: [], tenants: [{ id: 't1', name: 'T1', billingStatus: 'active', plan: 'basic' }, { id: 't2', name: 'T2', billingStatus: 'active', plan: 'basic' }] };
   const pub = (u) => { const rest = { ...u }; delete rest.password; delete rest.resetToken; delete rest.resetExpires; return { ...rest, id: String(u._id) }; };
   const impl = {
     ensureConnection: async () => {},
+    GetSyncVersions: async (tenantId) => ({ orders: 0, tables: 0, waitlist: 0, ...(state.sync[tenantId] || {}) }),
     GetTenantById: async (id) => state.tenants.find((t) => t.id === id) || null,
     FindUserByUsername: async (username, tenantId) => state.users.find((u) => u.username === username && (!tenantId || u.tenantId === tenantId)) || null,
     FindUserByEmail: async (email) => state.users.find((u) => u.email === email) || null,
@@ -54,7 +55,7 @@ async function startServer(app) {
     try { json = JSON.parse(text); } catch { /* texto plano */ }
     return { status: res.status, json, text };
   };
-  return { call, close: () => new Promise((r) => server.close(r)) };
+  return { call, base, close: () => new Promise((r) => server.close(r)) };
 }
 
 module.exports = { loadApp, startServer };

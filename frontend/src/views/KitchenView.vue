@@ -6,9 +6,20 @@
           <h1>Cocina</h1>
           <p>{{ activeCount }} activos · actualización automática</p>
         </div>
-        <button type="button" class="refresh" :disabled="loading" @click="load">
-          {{ loading ? '…' : 'Actualizar' }}
-        </button>
+        <div class="bar-actions">
+          <button
+            type="button"
+            class="refresh"
+            :aria-pressed="soundOn"
+            :title="soundOn ? 'Suena al llegar una comanda nueva' : 'Sin sonido'"
+            @click="toggleSound"
+          >
+            Sonido: {{ soundOn ? 'sí' : 'no' }}
+          </button>
+          <button type="button" class="refresh" :disabled="loading" @click="load()">
+            {{ loading ? '…' : 'Actualizar' }}
+          </button>
+        </div>
       </header>
 
       <div class="board">
@@ -28,7 +39,7 @@
               v-for="o in byStatus(col.status)"
               :key="o.id"
               class="ticket"
-              :class="urgencyClass(o)"
+              :class="[urgencyClass(o), { 'is-new': freshIds.has(o.id) }]"
             >
               <div class="ticket-top">
                 <p class="table">{{ o.tableName || 'Sin mesa' }}</p>
@@ -72,6 +83,8 @@
 
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from "vue";
+import { bindLive } from "../live";
+import { beep, resumeAudio } from "../sound";
 import AppShell from "../components/AppShell.vue";
 import { apiService } from "../apiService";
 import { labelOf, modalityLabel } from "../labels";
@@ -80,7 +93,13 @@ const orders = ref([]);
 const loading = ref(false);
 const busyId = ref(null);
 const now = ref(Date.now());
-let pollTimer;
+const live = bindLive(["orders"], () => load(true));
+const SOUND_KEY = "mirestaurante_kitchen_sound";
+const soundOn = ref(readSound());
+const freshIds = ref(new Set());
+const knownPending = new Set();
+let primed = false;
+const freshTimers = new Set();
 let clockTimer;
 
 const columns = [
@@ -123,12 +142,61 @@ function urgencyClass(o) {
   return "fresh";
 }
 
-async function load() {
-  loading.value = true;
+function readSound() {
   try {
-    orders.value = (await apiService.getOrders()) || [];
+    return localStorage.getItem(SOUND_KEY) !== "off";
   } catch {
-    orders.value = [];
+    return true;
+  }
+}
+
+function toggleSound() {
+  soundOn.value = !soundOn.value;
+  try {
+    localStorage.setItem(SOUND_KEY, soundOn.value ? "on" : "off");
+  } catch {
+    // Solo se pierde el recuerdo entre sesiones
+  }
+  if (soundOn.value) beep(); // además destraba el audio del navegador
+}
+
+/** Comandas nuevas desde la última carga: se resaltan y, si hay sonido, suena. */
+function announceNew(list) {
+  const pending = list
+    .filter((o) => o.status === "pending" && o.paymentStatus !== "paid")
+    .map((o) => o.id);
+  if (primed) {
+    const fresh = pending.filter((id) => !knownPending.has(id));
+    if (fresh.length) {
+      freshIds.value = new Set([...freshIds.value, ...fresh]);
+      const t = setTimeout(() => {
+        freshTimers.delete(t);
+        const next = new Set(freshIds.value);
+        fresh.forEach((id) => next.delete(id));
+        freshIds.value = next;
+      }, 8000);
+      freshTimers.add(t);
+      if (soundOn.value) {
+        beep();
+        navigator.vibrate?.(150);
+      }
+    }
+  }
+  knownPending.clear();
+  pending.forEach((id) => knownPending.add(id));
+  primed = true;
+}
+
+// silent: recarga automática. No parpadea el botón y, si falla, deja en pantalla lo que ya había
+// (una falla de red de un segundo no debe vaciar la cocina).
+async function load(silent = false) {
+  if (!silent) loading.value = true;
+  try {
+    const list = (await apiService.getOrders()) || [];
+    announceNew(list);
+    orders.value = list;
+  } catch {
+    if (!silent) orders.value = [];
   } finally {
     loading.value = false;
   }
@@ -149,16 +217,20 @@ async function advance(o, next) {
   }
 }
 
-onMounted(() => {
-  load();
-  pollTimer = setInterval(load, 5000);
+onMounted(async () => {
+  window.addEventListener("pointerdown", resumeAudio, { once: true });
   clockTimer = setInterval(() => {
     now.value = Date.now();
   }, 30000);
+  // Primero suscribirse y luego cargar: así no se pierde ningún cambio entre una cosa y la otra
+  await live.ready;
+  await load();
 });
 onUnmounted(() => {
-  clearInterval(pollTimer);
+  live.stop();
   clearInterval(clockTimer);
+  freshTimers.forEach(clearTimeout);
+  window.removeEventListener("pointerdown", resumeAudio);
 });
 </script>
 
@@ -272,6 +344,13 @@ onUnmounted(() => {
   background: var(--mirestaurante-panel-elevated);
   border: 2px solid var(--mirestaurante-line);
 }
+.bar-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.ticket.is-new { animation: kds-new 1.1s ease-in-out 3; box-shadow: 0 0 0 3px var(--mirestaurante-primary); }
+@keyframes kds-new {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.025); }
+}
+@media (prefers-reduced-motion: reduce) { .ticket.is-new { animation: none; } }
 .ticket.fresh { border-color: color-mix(in srgb, var(--mirestaurante-success) 40%, var(--mirestaurante-line)); }
 .ticket.warm { border-color: color-mix(in srgb, var(--mirestaurante-warning) 65%, var(--mirestaurante-line)); }
 .ticket.hot { border-color: var(--mirestaurante-danger); background: color-mix(in srgb, var(--mirestaurante-danger) 8%, var(--mirestaurante-panel-elevated)); }
