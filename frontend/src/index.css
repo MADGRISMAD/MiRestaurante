@@ -1,0 +1,275 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* MiRestaurante fixed system palette — only light / dark */
+:root,
+html[data-theme="light"] {
+  --mirestaurante-primary: #1a4a38;
+  --mirestaurante-primary-soft: #e4efe9;
+  --mirestaurante-accent: #9a7b52;
+  --mirestaurante-ink: #141a17;
+  --mirestaurante-muted: #66706a;
+  --mirestaurante-line: rgba(20, 26, 23, 0.1);
+  --mirestaurante-surface: #ece8e1;
+  --mirestaurante-panel: #fffcf8;
+  --mirestaurante-panel-elevated: #ffffff;
+  --mirestaurante-topbar: #0f241c;
+  --mirestaurante-topbar-text: #eef3f0;
+  --mirestaurante-dock: #fffcf8;
+  --mirestaurante-dock-text: #5c675f;
+  --mirestaurante-danger: #b42318;
+  --mirestaurante-danger-soft: #fdecea;
+  --mirestaurante-success: #1b5e20;
+  --mirestaurante-success-soft: #d9f0df;
+  --mirestaurante-warning: #e65100;
+  --mirestaurante-warning-soft: #fff3e0;
+  --mirestaurante-free: #1f7a45;
+  --mirestaurante-busy: #c0392b;
+  --mirestaurante-on-primary: #f8f6f2;
+  --mirestaurante-shadow: 0 1px 2px rgba(18, 24, 22, 0.04), 0 12px 32px rgba(18, 24, 22, 0.07);
+  --mirestaurante-radius: 1rem;
+  --font-sans: "Figtree", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Figtree", "Segoe UI", system-ui, sans-serif;
+  color-scheme: light;
+}
+
+html[data-theme="dark"] {
+  --mirestaurante-primary: #3d9a74;
+  --mirestaurante-primary-soft: rgba(61, 154, 116, 0.18);
+  --mirestaurante-accent: #c4a574;
+  --mirestaurante-ink: #eef2ef;
+  --mirestaurante-muted: #9aa59e;
+  --mirestaurante-line: rgba(238, 242, 239, 0.12);
+  --mirestaurante-surface: #101612;
+  --mirestaurante-panel: #1a221d;
+  --mirestaurante-panel-elevated: #222c26;
+  --mirestaurante-topbar: #0a1410;
+  --mirestaurante-topbar-text: #eef3f0;
+  --mirestaurante-dock: #151c18;
+  --mirestaurante-dock-text: #a7b2ab;
+  --mirestaurante-danger: #f97066;
+  --mirestaurante-danger-soft: rgba(249, 112, 102, 0.16);
+  --mirestaurante-success: #6ce9a6;
+  --mirestaurante-success-soft: rgba(108, 233, 166, 0.14);
+  --mirestaurante-warning: #fdb022;
+  --mirestaurante-warning-soft: rgba(253, 176, 34, 0.16);
+  --mirestaurante-free: #2f9e5b;
+  --mirestaurante-busy: #e4574d;
+  --mirestaurante-on-primary: #f8f6f2;
+  --mirestaurante-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 16px 40px rgba(0, 0, 0, 0.35);
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.45;
+  letter-spacing: 0.01em;
+  color: var(--mirestaurante-ink);
+  background: var(--mirestaurante-surface);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.remove-arrow::-webkit-inner-spin-button,
+.remove-arrow::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.remove-arrow {
+  -moz-appearance: textfield;
+}
+
+.mirestaurante-waitlist-bg {
+  background:
+    radial-gradient(ellipse 70% 50% at 20% 20%, rgba(154, 123, 82, 0.25), transparent 55%),
+    linear-gradient(155deg, var(--mirestaurante-topbar) 0%, #1a3f32 55%, #243d33 100%);
+}
+
+.t-page {
+  animation: t-fade-up 0.45s ease both;
+}
+
+@keyframes t-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.t-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.t-toolbar p {
+  margin: 0;
+  color: var(--mirestaurante-muted);
+  font-size: 0.95rem;
+  max-width: 36rem;
+  line-height: 1.45;
+}
+
+.t-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border: none;
+  border-radius: 0.7rem;
+  padding: 0.65rem 1.05rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.t-btn:hover {
+  transform: translateY(-1px);
+}
+
+.t-btn-primary {
+  background: var(--mirestaurante-primary);
+  color: #f8f6f2;
+  box-shadow: 0 8px 20px rgba(26, 74, 56, 0.22);
+}
+
+.t-btn-ghost {
+  background: transparent;
+  color: var(--mirestaurante-ink);
+  border: 1px solid var(--mirestaurante-line);
+}
+
+.t-card {
+  background: var(--mirestaurante-panel);
+  border: 1px solid var(--mirestaurante-line);
+  border-radius: var(--mirestaurante-radius);
+  box-shadow: var(--mirestaurante-shadow);
+}
+
+.t-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.7rem;
+  padding: 0 0.75rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  white-space: nowrap;
+  background: var(--mirestaurante-primary-soft);
+  color: var(--mirestaurante-primary);
+}
+
+.t-badge.st-pending { background: var(--mirestaurante-warning-soft); color: var(--mirestaurante-warning); }
+.t-badge.st-preparing { background: color-mix(in srgb, var(--mirestaurante-accent) 22%, transparent); color: var(--mirestaurante-accent); }
+.t-badge.st-ready { background: var(--mirestaurante-primary-soft); color: var(--mirestaurante-primary); }
+.t-badge.st-served { background: var(--mirestaurante-success-soft); color: var(--mirestaurante-success); }
+.t-badge.st-cancelled { background: var(--mirestaurante-danger-soft); color: var(--mirestaurante-danger); }
+.t-badge.paid { background: var(--mirestaurante-success-soft); color: var(--mirestaurante-success); }
+.t-badge.unpaid { background: var(--mirestaurante-warning-soft); color: var(--mirestaurante-warning); }
+
+.t-input,
+.t-select {
+  width: 100%;
+  border: 1px solid var(--mirestaurante-line);
+  border-radius: 0.65rem;
+  padding: 0.7rem 0.85rem;
+  background: var(--mirestaurante-panel-elevated);
+  color: var(--mirestaurante-ink);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.t-input:focus,
+.t-select:focus {
+  outline: none;
+  border-color: var(--mirestaurante-primary);
+  box-shadow: 0 0 0 3px rgba(26, 74, 56, 0.14);
+}
+
+.t-modal-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(10, 16, 14, 0.48);
+  backdrop-filter: blur(6px);
+  animation: t-fade-up 0.2s ease;
+}
+
+.t-modal {
+  width: min(26rem, 94vw);
+  background: var(--mirestaurante-panel);
+  color: var(--mirestaurante-ink);
+  border-radius: 1.15rem;
+  padding: 1.35rem;
+  border: 1px solid var(--mirestaurante-line);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22);
+  display: grid;
+  gap: 0.75rem;
+}
+
+.t-modal h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.t-empty {
+  color: var(--mirestaurante-muted);
+  font-size: 0.95rem;
+}
+
+button,
+.t-btn,
+a.dock-item {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+@media (pointer: coarse) {
+  button,
+  .t-btn,
+  select,
+  input {
+    min-height: 2.75rem;
+  }
+}

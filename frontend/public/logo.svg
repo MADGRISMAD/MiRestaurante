@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none">
+  <rect width="120" height="120" rx="24" fill="#1F4D3A"/>
+  <text x="60" y="76" text-anchor="middle" font-family="Figtree, Segoe UI, system-ui, sans-serif" font-size="46" font-weight="800" fill="#F7F4EF">M<tspan fill="#C4A574">R</tspan></text>
+  <rect x="28" y="88" width="64" height="4" rx="2" fill="#C4A574" opacity="0.7"/>
+</svg>

@@ -1,0 +1,60 @@
+const { ObjectId } = require('mongodb');
+const crypto = require('crypto');
+
+const ROLES = ['admin', 'hosstess', 'waiter', 'kitchen', 'cashier', 'platform_admin'];
+const TENANT_ROLES = ['admin', 'hosstess', 'waiter', 'kitchen', 'cashier'];
+const PLANS = ['basic', 'pro'];
+const BILLING_STATUSES = ['trialing', 'active', 'past_due', 'suspended'];
+const TRIAL_DAYS = 14;
+
+function trialEndsFrom(date = new Date()) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + TRIAL_DAYS);
+  return d;
+}
+
+function createTenantDoc(name = 'Mi negocio') {
+  const now = new Date();
+  return {
+    name,
+    plan: 'basic',
+    billingStatus: 'trialing',
+    trialEndsAt: trialEndsFrom(now),
+    mpPreapprovalId: null,
+    mpPayerEmail: null,
+    currentPeriodEnd: null,
+    suspendedAt: null,
+    suspendedReason: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function isSubscriptionActive(tenant) {
+  if (!tenant) return false;
+  const status = tenant.billingStatus || 'trialing';
+  if (status === 'suspended' || status === 'past_due') return false;
+  if (status === 'active') return true;
+  if (status === 'trialing') {
+    const ends = tenant.trialEndsAt ? new Date(tenant.trialEndsAt) : null;
+    return ends && ends.getTime() > Date.now();
+  }
+  return false;
+}
+
+function newResetToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+module.exports = {
+  ROLES,
+  TENANT_ROLES,
+  PLANS,
+  BILLING_STATUSES,
+  TRIAL_DAYS,
+  createTenantDoc,
+  trialEndsFrom,
+  isSubscriptionActive,
+  newResetToken,
+  ObjectId,
+};
