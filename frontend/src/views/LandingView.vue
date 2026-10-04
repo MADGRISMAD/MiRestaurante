@@ -920,17 +920,18 @@ export default {
 .cta-grid { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 3rem; align-items: center; }
 .cta h2 { font-family: var(--display); font-size: clamp(2.4rem, 6vw, 4.4rem); line-height: 1; letter-spacing: -0.035em; font-weight: 800; }
 .cta .hl { color: var(--ink); }
-.cta p { margin: 1.2rem 0 2rem; font-size: 1.2rem; color: rgba(255,255,255,.88); max-width: 30rem; }
+.cta h2 + p { margin: 1.2rem 0 2rem; font-size: 1.2rem; color: rgba(255,255,255,.88); max-width: 30rem; }
 .cta .btn-primary { background: var(--ink); box-shadow: 0 10px 30px -10px rgba(0,0,0,.6); }
 @media (hover: hover) and (pointer: fine) {
   .cta .btn-primary:hover { background: #000; }
 }
-.print { position: relative; justify-self: center; width: min(17rem, 100%); padding-top: 0.6rem; }
-.print.rv { transform: none; filter: none; }
+.print { position: relative; justify-self: center; width: min(20rem, 100%); padding-top: 0.6rem; }
+.print.rv, .print.rv.in { transform: none; filter: drop-shadow(0 24px 24px rgba(60, 10, 0, 0.35)); }
 .print-slot { height: 1rem; border-radius: 99px; background: var(--ink); box-shadow: inset 0 3px 4px rgba(0,0,0,.6); position: relative; z-index: 1; }
 .print-paper {
-  margin: -0.5rem 0.8rem 0; padding: 1.4rem 1.1rem 1.4rem; background: #fbf7ef; color: var(--ink); font-family: var(--mono); font-size: 0.85rem; line-height: 1.7;
-  box-shadow: 0 30px 50px -20px rgba(0,0,0,.45);
+  --zig: linear-gradient(#000 0 0) top / 100% calc(100% - 6px) no-repeat, radial-gradient(circle at 50% 100%, transparent 4px, #000 4.5px) bottom / 12px 6px repeat-x;
+  -webkit-mask: var(--zig); mask: var(--zig);
+  margin: -0.5rem 0.9rem 0; padding: 1.5rem 1.3rem 1.8rem; background: #fbf7ef; color: var(--ink); font-family: var(--mono); font-size: 0.95rem; line-height: 1.75;
   clip-path: inset(0 0 100% 0); transform: translateY(-40%);
   transition: clip-path 1.6s var(--ease-out) 0.3s, transform 1.6s var(--ease-out) 0.3s;
 }
