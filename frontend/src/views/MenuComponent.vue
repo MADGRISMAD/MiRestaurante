@@ -43,6 +43,7 @@
             </span>
             <span class="pname">{{ producto.name }}</span>
             <span class="price">{{ money(producto.price) }}</span>
+            <span v-if="mode === 'manage'" class="recipe-tag" :class="{ none: !producto.recipe?.length && !producto.extras?.length }">{{ recipeTag(producto) }}</span>
             <span
               v-if="mode === 'pos' && qtyById[producto.id]"
               :key="`${producto.id}-${bumps[producto.id] || 0}`"
@@ -93,21 +94,18 @@
         </form>
       </div>
 
-      <div v-if="showFoodForm" class="sheet-bg" @click.self="closeFoodForm">
-        <form class="sheet" @submit.prevent="createFood">
-          <h3>{{ editingFood ? 'Editar' : 'Nuevo' }} platillo</h3>
-          <input v-model="foodForm.name" class="inp" placeholder="Nombre" required />
-          <input v-model.number="foodForm.price" class="inp" type="number" min="0" step="0.01" placeholder="Precio" required />
-          <input v-model="foodForm.description" class="inp" placeholder="Descripción" />
-          <input v-model="foodForm.imgUrl" class="inp" type="url" placeholder="URL de imagen (https://…)" />
-          <div v-if="foodForm.imgUrl" class="preview">
-            <img :src="foodForm.imgUrl" alt="Vista previa" />
-          </div>
-          <button type="submit" class="act primary">Guardar</button>
-          <button v-if="editingFood" type="button" class="act danger" @click="deleteFood">Eliminar</button>
-          <button type="button" class="act" @click="closeFoodForm">Cancelar</button>
-        </form>
-      </div>
+      <!-- Alta y edición de productos: asistente Producto → Receta → Extras → Resumen -->
+      <ProductWizard
+        v-if="showFoodForm"
+        :key="editingFood?.id || 'nuevo'"
+        :food="editingFood"
+        :menu-id="selectedMenuId"
+        :ingredients="ingredients"
+        @close="closeFoodForm"
+        @saved="onFoodSaved"
+        @deleted="onFoodDeleted"
+        @ingredients-changed="loadIngredients"
+      />
     </div>
   </AppShell>
 </template>
@@ -115,6 +113,7 @@
 <script>
 import AppShell from "../components/AppShell.vue";
 import LSidebar from "../components/LSidebar.vue";
+import ProductWizard from "../components/ProductWizard.vue";
 import { ref, computed, reactive, onMounted, watch } from "vue";
 import { useRoute } from "vue-router";
 import { apiService } from "../apiService";
@@ -123,7 +122,7 @@ import { hasRole } from "../authStore";
 import { isCounterMode } from "../roles";
 
 export default {
-  components: { AppShell, LSidebar },
+  components: { AppShell, LSidebar, ProductWizard },
   setup() {
     const route = useRoute();
     const menus = ref([]);
@@ -138,7 +137,7 @@ export default {
     const tableId = ref(route.query.tableId || "");
     const tableName = ref(route.query.tableName || "");
     const menuForm = reactive({ name: "", description: "" });
-    const foodForm = reactive({ name: "", price: 0, description: "", imgUrl: "" });
+    const ingredients = ref([]);
 
     const productosFiltrados = computed(() => productos.value);
     const isAdmin = hasRole("admin");
@@ -202,49 +201,47 @@ export default {
 
     const editFood = (producto) => {
       editingFood.value = producto;
-      foodForm.name = producto.name;
-      foodForm.price = producto.price;
-      foodForm.description = producto.description || "";
-      foodForm.imgUrl = producto.imgUrl || "";
       showFoodForm.value = true;
     };
 
     const closeFoodForm = () => {
       showFoodForm.value = false;
       editingFood.value = null;
-      foodForm.name = "";
-      foodForm.price = 0;
-      foodForm.description = "";
-      foodForm.imgUrl = "";
     };
 
-    const createFood = async () => {
-      const payload = {
-        name: foodForm.name,
-        price: foodForm.price,
-        description: foodForm.description,
-        imgUrl: (foodForm.imgUrl || "").trim(),
-        menuId: selectedMenuId.value,
-      };
-      if (editingFood.value) {
-        const updated = await apiService.editFood(editingFood.value.id, payload);
-        const idx = productos.value.findIndex((p) => p.id === updated.id);
-        if (idx >= 0) productos.value[idx] = updated;
-      } else {
-        const created = await apiService.createFood(payload);
-        productos.value.push(created);
+    const onFoodSaved = (saved) => {
+      const idx = productos.value.findIndex((p) => p.id === saved.id);
+      if (idx >= 0) productos.value[idx] = saved;
+      else productos.value.push(saved);
+      closeFoodForm();
+    };
+
+    const onFoodDeleted = (id) => {
+      productos.value = productos.value.filter((p) => p.id !== id);
+      closeFoodForm();
+    };
+
+    // El asistente necesita los ingredientes para armar recetas y extras (solo el administrador edita)
+    const loadIngredients = async () => {
+      if (!isAdmin) return;
+      try {
+        ingredients.value = (await apiService.getIngredients()) || [];
+      } catch {
+        ingredients.value = [];
       }
-      closeFoodForm();
     };
 
-    const deleteFood = async () => {
-      if (!editingFood.value) return;
-      await apiService.deleteFood(editingFood.value.id);
-      productos.value = productos.value.filter((p) => p.id !== editingFood.value.id);
-      closeFoodForm();
+    const recipeTag = (p) => {
+      const r = p.recipe?.length || 0;
+      const e = p.extras?.length || 0;
+      if (!r && !e) return "Sin receta";
+      return [r ? `Receta · ${r}` : "", e ? `${e} ${e === 1 ? "extra" : "extras"}` : ""].filter(Boolean).join(" · ");
     };
 
-    onMounted(fetchMenus);
+    onMounted(() => {
+      fetchMenus();
+      loadIngredients();
+    });
 
     return {
       menus,
@@ -256,12 +253,14 @@ export default {
       showMenuForm,
       showFoodForm,
       menuForm,
-      foodForm,
+      ingredients,
       createMenu,
-      createFood,
       editFood,
       closeFoodForm,
-      deleteFood,
+      onFoodSaved,
+      onFoodDeleted,
+      loadIngredients,
+      recipeTag,
       editingFood,
       selectedMenuId,
       tableId,
@@ -413,6 +412,8 @@ export default {
 .prod:not(:has(.thumb)) .qty-badge { top: 0.5rem; right: 0.5rem; }
 .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .pname { padding: 0 0.3rem; font-weight: 600; font-size: 0.9rem; line-height: 1.2; }
+.recipe-tag { padding: 0 0.3rem; font-size: 0.72rem; font-weight: 700; color: var(--accent, var(--mirestaurante-primary)); }
+.recipe-tag.none { color: var(--mirestaurante-muted); font-weight: 500; }
 .price { padding: 0 0.3rem; margin-top: auto; font-family: var(--mono); font-size: 0.85rem; font-weight: 700; }
 /* Contador con un pequeño rebote al agregar: confirma el toque */
 .qty-badge {

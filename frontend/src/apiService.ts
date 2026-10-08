@@ -105,6 +105,24 @@ export const apiService = {
   counterSale(data: Record<string, unknown>) {
     return axios.post('/orders/counter', data).then((r) => r.data);
   },
+  getIngredients() {
+    return axios.get('/ingredients').then((r) => r.data);
+  },
+  createIngredient(data: Record<string, unknown>) {
+    return axios.post('/ingredients', data).then((r) => r.data);
+  },
+  updateIngredient(id: string, data: Record<string, unknown>) {
+    return axios.put(`/ingredients/${id}`, data).then((r) => r.data);
+  },
+  deleteIngredient(id: string) {
+    return axios.delete(`/ingredients/${id}`).then((r) => r.data);
+  },
+  stockMovement(id: string, data: { type: string; quantity: number; note?: string }) {
+    return axios.post(`/ingredients/${id}/stock`, data).then((r) => r.data);
+  },
+  getStockMovements(params: { ingredientId?: string; limit?: number } = {}) {
+    return axios.get('/ingredients/movements', { params }).then((r) => r.data);
+  },
   getSync() {
     return axios.get('/sync').then((r) => r.data);
   },

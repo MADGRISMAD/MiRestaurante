@@ -7,11 +7,11 @@ const path = require('path');
 const { ObjectId } = require('mongodb');
 
 function createFakeDb() {
-  const state = { settings: {}, cash: [], foods: [], orders: [], counters: {}, invites: [], sync: {}, users: [], waiters: [], tenants: [{ id: 't1', name: 'T1', billingStatus: 'active', plan: 'basic' }, { id: 't2', name: 'T2', billingStatus: 'active', plan: 'basic' }] };
+  const state = { ingredients: [], movements: [], menus: [], failAdjust: new Set(), settings: {}, cash: [], foods: [], orders: [], counters: {}, invites: [], sync: {}, users: [], waiters: [], tenants: [{ id: 't1', name: 'T1', billingStatus: 'active', plan: 'basic' }, { id: 't2', name: 'T2', billingStatus: 'active', plan: 'basic' }] };
   const pub = (u) => { const rest = { ...u }; delete rest.password; delete rest.resetToken; delete rest.resetExpires; return { ...rest, id: String(u._id) }; };
   const impl = {
     ensureConnection: async () => {},
-    GetSyncVersions: async (tenantId) => ({ orders: 0, tables: 0, waitlist: 0, ...(state.sync[tenantId] || {}) }),
+    GetSyncVersions: async (tenantId) => ({ orders: 0, tables: 0, waitlist: 0, inventory: 0, ...(state.sync[tenantId] || {}) }),
     GetTenantById: async (id) => state.tenants.find((t) => t.id === id) || null,
     FindUserByUsername: async (username, tenantId) => state.users.find((u) => u.username === username && (!tenantId || u.tenantId === tenantId)) || null,
     FindUserByEmail: async (email) => state.users.find((u) => u.email === email) || null,
@@ -30,6 +30,34 @@ function createFakeDb() {
     CountUsersByTenant: async (t) => state.users.filter((u) => u.tenantId === t).length,
     GetOpenCashSession: async (t) => state.cash.find((c) => c.tenantId === t && c.status === 'open') || null,
     GetFoods: async (t) => state.foods.filter((f) => f.tenantId === t),
+    GetFoodById: async (id, t) => state.foods.find((f) => f.id === id && f.tenantId === t) || null,
+    GetMenuById: async (id, t) => state.menus.find((m) => m.id === id && m.tenantId === t) || null,
+    CreateFood: async (d) => { const f = { ...d, id: String(new ObjectId()) }; state.foods.push(f); return f; },
+    UpdateFood: async (id, patch, t) => { const f = state.foods.find((x) => x.id === id && x.tenantId === t); if (!f) return null; const clean = { ...patch }; delete clean.id; delete clean._id; delete clean.tenantId; Object.assign(f, clean); return f; },
+    GetOrderById: async (id, t) => state.orders.find((o) => o.id === id && o.tenantId === t) || null,
+    UpdateOrder: async (id, patch, t) => { const o = state.orders.find((x) => x.id === id && x.tenantId === t); if (!o) return null; Object.assign(o, patch); return o; },
+    // —— inventario (misma semántica que database/mongodb.js)
+    GetIngredients: async (t) => state.ingredients.filter((i) => i.tenantId === t).sort((a, b) => a.name.localeCompare(b.name)),
+    GetIngredientById: async (id, t) => state.ingredients.find((i) => i.id === id && i.tenantId === t) || null,
+    CreateIngredient: async (d) => { const i = { ...d, id: String(new ObjectId()) }; state.ingredients.push(i); return i; },
+    UpdateIngredient: async (id, patch, t) => { const i = state.ingredients.find((x) => x.id === id && x.tenantId === t); if (!i) return null; const clean = { ...patch }; delete clean.id; delete clean.tenantId; delete clean.stock; Object.assign(i, clean); return i; },
+    DeleteIngredient: async (id, t) => { const n = state.ingredients.length; state.ingredients = state.ingredients.filter((i) => !(i.id === id && i.tenantId === t)); return { deletedCount: n - state.ingredients.length }; },
+    CountFoodsUsingIngredient: async (id, t) => state.foods.filter((f) => f.tenantId === t && ((f.recipe || []).some((l) => l.ingredientId === String(id)) || (f.extras || []).some((l) => l.ingredientId === String(id)))).length,
+    AdjustStock: async (t, id, delta, meta = {}) => {
+      if (state.failAdjust.has(String(id))) throw new Error('fallo simulado de inventario');
+      const i = state.ingredients.find((x) => x.id === String(id) && x.tenantId === t); if (!i) return null;
+      i.stock = Math.round((i.stock + delta + Number.EPSILON) * 1000) / 1000;
+      state.movements.push({ id: String(state.movements.length + 1), tenantId: t, ingredientId: i.id, ingredientName: i.name, unit: i.unit, type: meta.type, delta, stockAfter: i.stock, orderId: meta.orderId || null, note: meta.note || '', by: meta.by || null, at: new Date(Date.now() + state.movements.length) });
+      state.sync[t] = { ...(state.sync[t] || {}), inventory: ((state.sync[t] || {}).inventory || 0) + 1 };
+      return i;
+    },
+    SetStock: async (t, id, counted, meta = {}) => {
+      const i = state.ingredients.find((x) => x.id === String(id) && x.tenantId === t); if (!i) return null;
+      const before = i.stock; i.stock = counted;
+      state.movements.push({ id: String(state.movements.length + 1), tenantId: t, ingredientId: i.id, ingredientName: i.name, unit: i.unit, type: 'adjust', delta: Math.round((counted - before) * 1000) / 1000, stockAfter: counted, orderId: null, note: meta.note || '', by: meta.by || null, at: new Date(Date.now() + state.movements.length) });
+      return i;
+    },
+    GetStockMovements: async (t, { ingredientId, limit = 50 } = {}) => state.movements.filter((m) => m.tenantId === t && (!ingredientId || m.ingredientId === ingredientId)).sort((a, b) => b.at - a.at).slice(0, limit),
     GetOrderByClientRef: async (t, ref) => { const found = state.orders.find((o) => o.tenantId === t && o.clientRef === ref) || null; if (state.slowLookup) await new Promise((r) => setTimeout(r, 25)); return found; },
 
     NextCounter: async (t, key) => { const k = `${t}:${key}`; state.counters[k] = (state.counters[k] || 0) + 1; return state.counters[k]; },

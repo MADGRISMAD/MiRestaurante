@@ -1,5 +1,7 @@
 const db = require('../database/mongodb');
 const { normalizeOrder, orderStatuses, paymentMethods } = require('../models/order.model');
+const inv = require('../models/inventory');
+const inventory = require('../services/inventory.service');
 
 const round2 = (n) => Number(Number(n).toFixed(2));
 const MAX_LINES = 50;
@@ -62,6 +64,13 @@ async function create(req, res) {
 
     const created = await db.CreateOrder(payload);
 
+    try {
+      const foodsById = new Map((await db.GetFoods(req.tenantId)).map((f) => [String(f.id), f]));
+      await inventory.applySale({ tenantId: req.tenantId, order: created, foodsById, by: req.user?.username });
+    } catch (e) {
+      console.error('[inventory] pedido sin descontar:', e.message);
+    }
+
     if (payload.tableId && payload.modality === 'dine-in') {
       try {
         await db.UpdateStatusMesa(
@@ -90,11 +99,17 @@ async function updateStatus(req, res) {
     if (!orderStatuses.includes(status)) {
       return res.status(400).send('Estado inválido');
     }
-    const updated = await db.UpdateOrder(
-      req.params.id,
-      { status, updatedAt: new Date() },
-      req.tenantId
-    );
+    const existing = await db.GetOrderById(req.params.id, req.tenantId);
+    if (!existing) return res.status(404).send('Pedido no encontrado');
+
+    const patch = { status, updatedAt: new Date() };
+    if (status === 'cancelled' && existing.status !== 'cancelled') {
+      const restored = await inventory
+        .restoreSale({ tenantId: req.tenantId, order: existing, by: req.user?.username })
+        .catch((e) => { console.error('[inventory] no se devolvió el stock:', e.message); return false; });
+      if (restored) patch.stockRestored = true;
+    }
+    const updated = await db.UpdateOrder(req.params.id, patch, req.tenantId);
     if (!updated) return res.status(404).send('Pedido no encontrado');
     return res.status(200).json(updated);
   } catch (err) {
@@ -137,10 +152,16 @@ async function counterSale(req, res) {
       }
       const food = foods.get(String(line.foodId));
       if (!food) return res.status(400).send('Un producto ya no existe en el menú. Actualiza la pantalla.');
+      // Los extras (pumps de sabor, azúcar…) se validan contra lo que el platillo ofrece y se cobran al
+      // precio del menú; lo que mande el cliente solo dice cuántos de cada uno.
+      const resolved = inv.resolveOptions(food, line.options);
+      if (resolved.error) return res.status(400).send(resolved.error);
       items.push({
         foodId: food.id,
         name: food.name,
-        price: Number(food.price) || 0,
+        price: inv.unitPriceWithExtras(food, resolved.options),
+        basePrice: Number(food.price) || 0,
+        options: resolved.options,
         quantity,
         notes: String(line.notes || '').trim().slice(0, 80),
       });
@@ -148,6 +169,7 @@ async function counterSale(req, res) {
 
     // normalizeOrder calcula subtotal, IVA y total; no hay costo de envío en mostrador.
     const payload = normalizeOrder({ items, modality: 'dine-in' });
+    payload.items = items; // normalizeOrder solo conserva los campos básicos; aquí también van las opciones
     const customerName = String(body.customerName || '').trim().slice(0, 40);
     let received = null;
     if (method === 'cash') {
@@ -184,6 +206,10 @@ async function counterSale(req, res) {
 
     try {
       const created = await db.CreateOrder(payload);
+      // Descuenta el inventario; si algo falla ahí, la venta ya hecha no se pierde
+      await inventory
+        .applySale({ tenantId: req.tenantId, order: created, foodsById: foods, by: req.user?.username })
+        .catch((e) => console.error('[inventory] venta sin descontar:', e.message));
       return res.status(201).json(created);
     } catch (err) {
       // Dos peticiones iguales a la vez: la segunda choca con el índice único y devuelve la primera.

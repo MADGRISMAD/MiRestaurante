@@ -156,6 +156,7 @@ backend se protegen aparte con `requireRoles(...)` en cada router.
 | Pedido | `/menu` | Ambos | ✓ | salón |  | salón |  |  |
 | Caja | `/orders` | Ambos | ✓ |  |  | ✓ |  |  |
 | Equipo y roles | `/team` | Ambos | ✓ |  |  |  |  |  |
+| Inventario | `/inventory` | Ambos | ✓ |  |  |  |  |  |
 | Facturación y planes | `/billing` | Ambos | ✓ |  |  | ✓ |  |  |
 | Configuración | `/settings` | Ambos | ✓ |  |  |  |  |  |
 | Cuenta | `/print/order/:id` | Ambos | ✓ | ✓ | ✓ | ✓ |  |  |
@@ -204,6 +205,52 @@ Si hay dos personas con sesión, lo que vende una se ve en la otra en ≤ ~1.5 s
 **Dónde vive en el código:** `backend/models/venueMode.js` y `frontend/src/roles.js` (modos, límites y qué pantallas
 existen en cada modo; un test verifica que coincidan), `backend/controllers/orders.controller.js` (`counterSale`) y
 `frontend/src/views/CounterView.vue`.
+
+## Inventario, recetas y extras
+El administrador lleva el inventario de **ingredientes** (leche, café, jarabes, vasos…) desde **Inventario**
+(`/inventory`, en café y en restaurante). Cada producto puede tener una **receta** y **extras**, y al vender se
+descuenta solo.
+
+**Ingredientes.** Nombre, unidad (pieza, ml, litro, gramo, kilo, pump, shot, sobre, cucharadita), existencia y un
+mínimo para avisar. La existencia **solo cambia con movimientos**, que quedan en el historial: *Entrada* (compra),
+*Merma*, *Conteo* (inventario físico; se guarda la diferencia real) y los automáticos de *Venta* y *Devolución*.
+Una existencia en cero o menos es "Agotado"; en o bajo el mínimo, "Por agotarse". El panel y el Mostrador avisan,
+y todo se actualiza solo entre dispositivos (canal `inventory` de *Tiempo real*).
+
+**Asistente de productos** (Menú → "+ Platillo" o tocar un producto), en 4 pasos:
+1. **Producto:** nombre, precio base, descripción e imagen.
+2. **Receta:** qué ingredientes lleva y cuánto de cada uno por unidad vendida. Se puede crear un ingrediente
+   nuevo sin salir del asistente.
+3. **Extras:** ingredientes que el cliente puede agregar encima (sabores, azúcar, un shot extra). Por cada uno:
+   cuánto consume cada extra, su precio (0 = sin costo), su nombre en la cuenta y un máximo.
+4. **Resumen:** un ejemplo de venta con el precio y el descuento reales.
+
+**Constructor de bebida** (Mostrador): al tocar un producto con extras se abre el paso a paso — extras con +/−,
+una nota rápida (Descafeinado, Sin azúcar, Extra caliente…) o escrita a mano, y la cantidad. La cuenta muestra
+cada personalización y se pueden editar los extras de una línea. Ejemplo: *Latte $40 con 5 pumps de lavanda
+($5 c/u), 3 de azúcar (gratis) y nota "descafeinado", ×2 = $130 + IVA*; descuenta 2 shots, 480 ml de leche, 2
+vasos, 10 pumps de lavanda y 6 sobres de azúcar.
+
+**Reglas** (las cumple el servidor, no solo la pantalla)
+- Los extras y su precio salen **de lo que el producto ofrece**; el cliente solo manda cuántos de cada uno.
+  Un extra que el producto no ofrece, o por encima de su máximo, se rechaza.
+- **Una venta nunca se bloquea por falta de existencia**: el stock puede quedar en negativo (se marca "Agotado")
+  para que se note que el conteo está desactualizado.
+- Al vender se guarda en el pedido una **instantánea de lo descontado**; al **cancelar** se devuelve exactamente
+  eso (aunque la receta haya cambiado después) y **una sola vez**, aunque el pedido se reabra y se cancele otra vez.
+- Un reintento o doble clic no vuelve a descontar. Si el descuento de algún ingrediente falla, la venta ya hecha
+  no se pierde (queda registrado el error).
+- Los pedidos de **salón** descuentan la receta base de cada producto (el armado de extras es por ahora del
+  Mostrador).
+- No se puede **borrar** un ingrediente ni **cambiarle la unidad** si algún producto lo usa (receta o extra).
+- La caja puede ver las existencias; solo el administrador las cambia. Cada negocio ve únicamente lo suyo.
+- Editar un producto solo cambia los campos que llegan y nunca su negocio.
+
+**Dónde vive en el código:** `backend/models/inventory.js` (unidades, validación y cálculo de precio y consumo),
+`backend/services/inventory.service.js` (descuento y devolución), `backend/controllers/ingredients.controller.js`,
+`frontend/src/recipeMath.js` e `inventoryUnits.js` (el mismo cálculo en pantalla; `tests/inventory-parity.test.js`
+verifica que ambos lados den exactamente lo mismo), `InventoryView.vue`, `components/ProductWizard.vue` y el
+constructor dentro de `CounterView.vue`.
 
 ## Tiempo real
 Cocina, mesas, lista de espera, caja, panel y los avisos del mesero se actualizan solos: un cambio hecho en

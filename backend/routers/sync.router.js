@@ -10,7 +10,7 @@ router.get('/', requireAuth, async (req, res) => {
   try {
     const v = req.tenantId
       ? await db.GetSyncVersions(req.tenantId)
-      : { orders: 0, tables: 0, waitlist: 0 };
+      : { orders: 0, tables: 0, waitlist: 0, inventory: 0 };
     return res.status(200).json({ v, t: Date.now() });
   } catch (err) {
     console.error(err);

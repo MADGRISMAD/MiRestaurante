@@ -22,6 +22,11 @@
         Caja abierta · {{ cash.count }} {{ cash.count === 1 ? 'venta' : 'ventas' }} · {{ money(cash.total) }} en este turno
       </p>
 
+      <p v-if="stockAlert" class="stock-note" role="status">
+        {{ stockAlert }}
+        <router-link v-if="isAdmin" to="/inventory">Ver inventario</router-link>
+      </p>
+
       <div class="grid" :class="{ locked: cash.loaded && !cash.open }">
         <!-- Productos -->
         <section class="products-col" aria-label="Productos">
@@ -54,12 +59,13 @@
               type="button"
               class="tile"
               :class="{ picked: qtyOf(p.id) }"
-              :aria-label="`Agregar ${p.name}, ${money(p.price)}`"
-              @click="add(p)"
+              :aria-label="extrasOf(p).length ? `Personalizar ${p.name}, desde ${money(p.price)}` : `Agregar ${p.name}, ${money(p.price)}`"
+              @click="onTile(p)"
             >
               <span v-if="p.imgUrl" class="thumb"><img :src="p.imgUrl" alt="" loading="lazy" /></span>
               <span class="tile-name">{{ p.name }}</span>
-              <span class="tile-price">{{ money(p.price) }}</span>
+              <span class="tile-price">{{ money(p.price) }}<em v-if="extrasOf(p).length" class="tile-extras"> · personaliza</em></span>
+              <span v-if="missing(p).length" class="tile-missing" :title="`Sin existencia: ${missing(p).join(', ')}`">Sin {{ missing(p)[0] }}</span>
               <span v-if="qtyOf(p.id)" class="qty-badge" aria-hidden="true">{{ qtyOf(p.id) }}</span>
             </button>
           </div>
@@ -80,6 +86,7 @@
                   <div class="line-copy">
                     <p class="name">{{ l.name }}</p>
                     <p class="unit">{{ money(l.price) }} c/u</p>
+                    <p v-if="l.options.length" class="opts">{{ optionsText(l) }}</p>
                   </div>
                   <div class="qty">
                     <button type="button" :aria-label="l.quantity > 1 ? `Quitar uno de ${l.name}` : `Quitar ${l.name}`" @click="dec(i)">{{ l.quantity > 1 ? '−' : '×' }}</button>
@@ -98,7 +105,10 @@
                   placeholder="Ej. leche de avena, sin azúcar"
                   :aria-label="`Nota para ${l.name}`"
                 />
-                <button v-else type="button" class="add-note" @click="noteOpen[i] = true">+ Nota</button>
+                <div v-if="!(noteOpen[i] || l.notes) || extrasOf(l.food).length" class="line-tools">
+                  <button v-if="!(noteOpen[i] || l.notes)" type="button" class="add-note" @click="noteOpen[i] = true">+ Nota</button>
+                  <button v-if="extrasOf(l.food).length" type="button" class="add-note" @click="openBuilder(l.food, i)">Editar extras</button>
+                </div>
               </li>
             </ul>
             <p v-else class="empty-ticket">Toca un producto para agregarlo.</p>
@@ -132,6 +142,55 @@
         <span>{{ itemCount }} {{ itemCount === 1 ? 'producto' : 'productos' }}</span>
         <strong>Ver cuenta · {{ money(totals.total) }}</strong>
       </button>
+
+      <!-- Constructor de bebida: extras, nota y cantidad -->
+      <Teleport to="body">
+        <div v-if="builder.open" class="modal-bg" @click.self="closeBuilder">
+          <form class="modal builder" role="dialog" aria-modal="true" aria-labelledby="b-title" @submit.prevent="confirmBuilder" @keydown.esc="closeBuilder">
+            <header>
+              <h3 id="b-title">{{ builder.food.name }}</h3>
+              <p class="b-base">Precio base {{ money(builder.food.price) }}</p>
+            </header>
+
+            <div class="b-section">
+              <h4>Extras</h4>
+              <div v-for="e in extrasOf(builder.food)" :key="e.ingredientId" class="b-extra" :class="{ on: pickOf(e) > 0 }">
+                <div class="b-copy">
+                  <p class="b-label">{{ e.label }}</p>
+                  <p class="b-price">{{ e.price > 0 ? `+${money(e.price)} c/u` : 'Sin costo' }}<template v-if="pickOf(e) > 0 && e.price > 0"> · {{ money(e.price * pickOf(e)) }}</template></p>
+                </div>
+                <div class="qty">
+                  <button type="button" :disabled="pickOf(e) === 0" :aria-label="`Quitar uno de ${e.label}`" @click="setPick(e, pickOf(e) - 1)">−</button>
+                  <span :aria-label="`${pickOf(e)} de ${e.label}`">{{ pickOf(e) }}</span>
+                  <button type="button" :disabled="pickOf(e) >= e.max" :aria-label="`Agregar uno de ${e.label}`" @click="setPick(e, pickOf(e) + 1)">+</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="b-section">
+              <h4>Nota</h4>
+              <div class="chips" role="group" aria-label="Notas rápidas">
+                <button v-for="n in QUICK_NOTES" :key="n" type="button" :aria-pressed="builder.chips.includes(n)" @click="toggleChip(n)">{{ n }}</button>
+              </div>
+              <input v-model="builder.note" class="b-note" type="text" maxlength="40" autocomplete="off" placeholder="Otra nota (opcional)" aria-label="Otra nota" />
+            </div>
+
+            <div class="b-qty">
+              <span>Cantidad</span>
+              <div class="qty">
+                <button type="button" :disabled="builder.quantity <= 1" aria-label="Una menos" @click="builder.quantity -= 1">−</button>
+                <span>{{ builder.quantity }}</span>
+                <button type="button" :disabled="builder.quantity >= 99" aria-label="Una más" @click="builder.quantity += 1">+</button>
+              </div>
+            </div>
+
+            <div class="modal-actions">
+              <button type="button" class="btn" @click="closeBuilder">Cancelar</button>
+              <button type="submit" class="btn primary">{{ builder.editIndex >= 0 ? 'Guardar' : 'Agregar' }} · {{ money(builderUnit * builder.quantity) }}</button>
+            </div>
+          </form>
+        </div>
+      </Teleport>
 
       <!-- Cobro -->
       <Teleport to="body">
@@ -195,11 +254,15 @@ import AppShell from "../components/AppShell.vue";
 import { apiService } from "../apiService";
 import { hasRole } from "../authStore";
 import { bindLive } from "../live";
+import { extrasOf, lineKey, missingIngredients, priceWithExtras } from "../recipeMath";
 
 // El servidor recalcula todo (precios del menú, IVA, total); esto solo muestra lo mismo mientras se arma la cuenta.
 const TAX_RATE = 0.08;
 const round2 = (n) => Number(Number(n).toFixed(2));
 const money = (n) => Number(n || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
+
+// Notas que se repiten en un café: un toque en vez de escribir
+const QUICK_NOTES = ["Descafeinado", "Sin azúcar", "Extra caliente", "Tibio", "Con hielo", "Sin hielo", "Poca leche"];
 
 const methods = [
   { id: "cash", label: "Efectivo" },
@@ -215,6 +278,19 @@ const productsByMenu = reactive({});
 const selectedMenuId = ref("");
 
 const lines = ref([]);
+const ingredients = ref([]);
+const ingredientsById = computed(() => new Map(ingredients.value.map((i) => [i.id, i])));
+const missing = (p) => missingIngredients(p, ingredientsById.value);
+const lowCount = computed(() => ingredients.value.filter((i) => i.status !== "ok").length);
+// Aviso, nunca bloqueo: una venta no se frena por un conteo desactualizado
+const stockAlert = computed(() => {
+  const out = ingredients.value.filter((i) => i.status === "out").length;
+  const low = ingredients.value.filter((i) => i.status === "low").length;
+  const parts = [];
+  if (out) parts.push(`${out} ${out === 1 ? "insumo agotado" : "insumos agotados"}`);
+  if (low) parts.push(`${low} por agotarse`);
+  return parts.join(" · ");
+});
 const noteOpen = reactive({});
 const customerName = ref("");
 const takeaway = ref(false);
@@ -241,11 +317,21 @@ const bills = computed(() => [20, 50, 100, 200, 500, 1000].filter((b) => b >= to
 
 const qtyOf = (foodId) => lines.value.filter((l) => l.foodId === foodId).reduce((n, l) => n + l.quantity, 0);
 
-function add(p) {
-  const line = lines.value.find((l) => l.foodId === p.id && !l.notes);
-  if (line) line.quantity = Math.min(99, line.quantity + 1);
-  else lines.value.push({ foodId: p.id, name: p.name, price: Number(p.price) || 0, quantity: 1, notes: "" });
+function pushLine(food, options, unitPrice, quantity, notes) {
+  const key = lineKey(food.id, options, notes);
+  const same = lines.value.find((l) => lineKey(l.foodId, l.options, l.notes) === key);
+  if (same) same.quantity = Math.min(99, same.quantity + quantity);
+  else lines.value.push({ foodId: food.id, name: food.name, basePrice: Number(food.price) || 0, price: unitPrice, quantity, notes, options, food });
 }
+function add(p) {
+  pushLine(p, [], Number(p.price) || 0, 1, "");
+}
+// Un producto con extras abre el constructor; uno sin extras se agrega de un toque
+function onTile(p) {
+  if (extrasOf(p).length) openBuilder(p);
+  else add(p);
+}
+const optionsText = (l) => l.options.map((o) => `${o.label} ×${o.quantity}`).join(" · ");
 function inc(i) {
   lines.value[i].quantity = Math.min(99, lines.value[i].quantity + 1);
 }
@@ -265,6 +351,51 @@ function clearCart() {
   sheetOpen.value = false;
 }
 
+/* —— Constructor de bebida —— */
+const builder = reactive({ open: false, food: null, picks: {}, chips: [], note: "", quantity: 1, editIndex: -1 });
+const built = computed(() => (builder.food ? priceWithExtras(builder.food, builder.picks) : { options: [], unitPrice: 0 }));
+const builderUnit = computed(() => built.value.unitPrice);
+const pickOf = (e) => builder.picks[e.ingredientId] || 0;
+function setPick(e, n) {
+  builder.picks[e.ingredientId] = Math.max(0, Math.min(e.max, n));
+}
+function toggleChip(n) {
+  const i = builder.chips.indexOf(n);
+  if (i >= 0) builder.chips.splice(i, 1);
+  else builder.chips.push(n);
+}
+function openBuilder(food, editIndex = -1) {
+  const line = editIndex >= 0 ? lines.value[editIndex] : null;
+  const picks = {};
+  for (const o of line?.options || []) picks[o.ingredientId] = o.quantity;
+  // Al editar, la nota se vuelve a separar en las rápidas que tocó y lo que escribió a mano
+  const tokens = (line?.notes || "").split(/,\s*/).filter(Boolean);
+  Object.assign(builder, {
+    open: true,
+    food,
+    picks,
+    chips: tokens.filter((t) => QUICK_NOTES.includes(t)),
+    note: tokens.filter((t) => !QUICK_NOTES.includes(t)).join(", "),
+    quantity: line?.quantity || 1,
+    editIndex,
+  });
+}
+function closeBuilder() {
+  builder.open = false;
+}
+function confirmBuilder() {
+  const notes = [...QUICK_NOTES.filter((n) => builder.chips.includes(n)), builder.note.trim()].filter(Boolean).join(", ").slice(0, 80);
+  const { options, unitPrice } = built.value;
+  if (builder.editIndex >= 0) {
+    const l = lines.value[builder.editIndex];
+    Object.assign(l, { options, price: unitPrice, notes, quantity: builder.quantity });
+    Object.keys(noteOpen).forEach((k) => delete noteOpen[k]);
+  } else {
+    pushLine(builder.food, options, unitPrice, builder.quantity, notes);
+  }
+  builder.open = false;
+}
+
 const newRef = () =>
   (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`).slice(0, 64);
 
@@ -281,6 +412,14 @@ async function loadMenus() {
     menus.value = [];
   } finally {
     loading.value = false;
+  }
+}
+
+async function loadIngredients() {
+  try {
+    ingredients.value = (await apiService.getIngredients()) || [];
+  } catch {
+    // Sin inventario la venta funciona igual: solo no hay avisos de existencias
   }
 }
 
@@ -353,12 +492,19 @@ async function confirmPay() {
       amountReceived: pay.method === "cash" ? receivedNumber.value : undefined,
       customerName: customerName.value.trim(),
       takeaway: takeaway.value,
-      items: lines.value.map((l) => ({ foodId: l.foodId, quantity: l.quantity, notes: (l.notes || "").trim() })),
+      items: lines.value.map((l) => ({
+        foodId: l.foodId,
+        quantity: l.quantity,
+        notes: (l.notes || "").trim(),
+        // Solo cuántos de cada extra: el precio y lo que ofrece el producto los decide el servidor
+        options: l.options.map((o) => ({ ingredientId: o.ingredientId, quantity: o.quantity })),
+      })),
     });
     pay.order = order;
     pay.done = true;
     pay.ref = "";
     loadCash(true);
+    loadIngredients();
     await nextTick();
     newSaleBtn.value?.focus?.();
   } catch (e) {
@@ -380,10 +526,13 @@ function newSale() {
   clearCart();
 }
 
-const live = bindLive(["orders"], () => loadCash(true));
+const live = bindLive(["orders", "inventory"], (changed) => {
+  if (changed.includes("orders")) loadCash(true);
+  if (changed.includes("inventory")) loadIngredients();
+});
 onMounted(async () => {
   await live.ready;
-  await Promise.all([loadMenus(), loadCash()]);
+  await Promise.all([loadMenus(), loadCash(), loadIngredients()]);
 });
 onUnmounted(() => live.stop());
 </script>
@@ -465,6 +614,32 @@ onUnmounted(() => live.stop());
 .charge { min-height: 3.6rem; font-size: 1.15rem; }
 
 .cart-bar { display: none; }
+
+.stock-note { margin: 0; padding: 0.55rem 0.8rem; border-radius: 0.7rem; background: var(--mirestaurante-warning-soft); color: var(--mirestaurante-warning); font-size: 0.85rem; font-weight: 600; }
+.stock-note a { margin-left: 0.4rem; color: inherit; text-decoration: underline; }
+.tile-extras { font-style: normal; font-weight: 500; font-size: 0.78rem; }
+.tile-missing { justify-self: start; padding: 0.1rem 0.5rem; border-radius: 999px; background: var(--mirestaurante-danger-soft); color: var(--mirestaurante-danger); font-size: 0.7rem; font-weight: 800; }
+.opts { margin: 0.15rem 0 0; font-size: 0.8rem; color: var(--mirestaurante-primary); font-weight: 600; overflow-wrap: anywhere; }
+.line-tools { display: flex; gap: 0.9rem; flex-wrap: wrap; }
+
+/* Constructor de bebida */
+.builder { gap: 0.8rem; }
+.builder header { display: grid; gap: 0.1rem; }
+.b-base { margin: 0; color: var(--mirestaurante-muted); font-size: 0.9rem; }
+.b-section { display: grid; gap: 0.5rem; }
+.b-section h4 { margin: 0; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--mirestaurante-muted); }
+.b-extra { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.6rem; align-items: center; padding: 0.55rem 0.7rem; border-radius: 0.85rem; border: 1.5px solid var(--mirestaurante-line); background: var(--mirestaurante-panel-elevated); }
+.b-extra.on { border-color: var(--mirestaurante-primary); background: var(--mirestaurante-primary-soft); }
+.b-copy { min-width: 0; }
+.b-label { margin: 0; font-weight: 700; overflow-wrap: anywhere; }
+.b-price { margin: 0; font-size: 0.8rem; color: var(--mirestaurante-muted); }
+.qty button:disabled { opacity: 0.35; cursor: not-allowed; }
+.chips { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.chips button { min-height: 2.5rem; padding: 0 0.85rem; border-radius: 999px; border: 1.5px solid var(--mirestaurante-line); background: var(--mirestaurante-panel-elevated); color: var(--mirestaurante-ink); font-weight: 600; font-size: 0.85rem; cursor: pointer; }
+.chips button[aria-pressed="true"] { background: var(--mirestaurante-primary); border-color: var(--mirestaurante-primary); color: var(--mirestaurante-on-primary); }
+.b-note { min-height: 2.8rem; border: 1px solid var(--mirestaurante-line); border-radius: 0.7rem; padding: 0 0.8rem; font: inherit; background: var(--mirestaurante-panel-elevated); color: var(--mirestaurante-ink); width: 100%; box-sizing: border-box; }
+.b-qty { display: flex; align-items: center; justify-content: space-between; font-weight: 700; }
+.builder { overflow-y: auto; }
 
 /* Cobro */
 .modal-bg { position: fixed; inset: 0; z-index: 300; background: rgba(10, 16, 14, 0.55); backdrop-filter: blur(6px); display: flex; align-items: flex-end; justify-content: center; padding: 0.75rem; padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px)); box-sizing: border-box; }

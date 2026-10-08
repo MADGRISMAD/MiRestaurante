@@ -41,6 +41,7 @@
           <p class="center section">*** PLATILLOS ***</p>
           <div v-for="(item, i) in order.items || []" :key="i" class="k-item">
             <p class="k-qty">{{ padQty(item.quantity) }}  {{ (item.name || '').toUpperCase() }}</p>
+            <p v-for="o in item.options || []" :key="o.ingredientId" class="note">    + {{ (o.label || '').toUpperCase() }} x{{ o.quantity }}</p>
             <p v-if="item.notes" class="note">    NOTA: {{ item.notes }}</p>
           </div>
           <template v-if="order.notes">
@@ -69,6 +70,7 @@
               <span class="c-pu">{{ moneyPlain(item.price) }}</span>
               <span class="c-imp">{{ moneyPlain(item.price * item.quantity) }}</span>
             </div>
+            <p v-for="o in item.options || []" :key="o.ingredientId" class="note">  + {{ truncate(o.label, 18) }} x{{ o.quantity }}<template v-if="o.unitPrice > 0"> ({{ moneyPlain(o.unitPrice * o.quantity) }})</template></p>
             <p v-if="item.notes" class="note">  * {{ item.notes }}</p>
           </div>
 

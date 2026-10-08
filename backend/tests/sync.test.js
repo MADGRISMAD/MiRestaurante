@@ -16,7 +16,7 @@ test('devuelve los contadores del negocio, sin caché, para cualquier rol', asyn
   for (const role of ['admin', 'waiter', 'kitchen', 'cashier', 'host']) {
     const r = await api.call('GET', '/sync', { token: tokenFor('x', role) });
     assert.equal(r.status, 200, role);
-    assert.deepEqual(r.json.v, { orders: 7, tables: 3, waitlist: 0 }, role);
+    assert.deepEqual(r.json.v, { orders: 7, tables: 3, waitlist: 0, inventory: 0 }, role);
     assert.equal(typeof r.json.t, 'number');
   }
   const raw = await fetch(`${api.base}/sync`, { headers: { Authorization: tokenFor('x', 'waiter') } });
@@ -36,7 +36,7 @@ test('cada negocio ve solo sus contadores', async () => {
 test('un negocio sin cambios todavía devuelve ceros', async () => {
   delete state.sync.t1;
   const r = await api.call('GET', '/sync', { token: tokenFor('x', 'admin') });
-  assert.deepEqual(r.json.v, { orders: 0, tables: 0, waitlist: 0 });
+  assert.deepEqual(r.json.v, { orders: 0, tables: 0, waitlist: 0, inventory: 0 });
 });
 
 test('el sondeo sigue respondiendo aunque la suscripción esté vencida (solo son contadores)', async () => {
@@ -50,5 +50,5 @@ test('la plataforma (sin negocio) no revienta', async () => {
   const token = 'Bearer ' + generateJWT({ userId: 'root', userRole: 'platform_admin' });
   const r = await api.call('GET', '/sync', { token });
   assert.equal(r.status, 200);
-  assert.deepEqual(r.json.v, { orders: 0, tables: 0, waitlist: 0 });
+  assert.deepEqual(r.json.v, { orders: 0, tables: 0, waitlist: 0, inventory: 0 });
 });

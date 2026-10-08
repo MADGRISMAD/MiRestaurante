@@ -240,8 +240,8 @@ async function touchSync(tenantId, ...channels) {
 async function GetSyncVersions(tenantId) {
   const doc = await dbConnection
     .collection('sync')
-    .findOne({ _id: String(tenantId) }, { projection: { _id: 0, orders: 1, tables: 1, waitlist: 1 } });
-  return { orders: doc?.orders || 0, tables: doc?.tables || 0, waitlist: doc?.waitlist || 0 };
+    .findOne({ _id: String(tenantId) }, { projection: { _id: 0, orders: 1, tables: 1, waitlist: 1, inventory: 1 } });
+  return { orders: doc?.orders || 0, tables: doc?.tables || 0, waitlist: doc?.waitlist || 0, inventory: doc?.inventory || 0 };
 }
 
 async function AddMesa(data) {
@@ -316,6 +316,103 @@ async function CloseMesas(tenantId) {
   return result;
 }
 
+// ——— Inventario ———
+// Las existencias admiten decimales; se redondean al leer para no mostrar 0.30000000000000004.
+const stockRound = (n) => Math.round((Number(n) + Number.EPSILON) * 1000) / 1000;
+const withStock = (doc) => (doc ? { ...withId(doc), stock: stockRound(doc.stock), minStock: stockRound(doc.minStock) } : doc);
+
+async function GetIngredients(tenantId) {
+  const rows = await dbConnection.collection('ingredients').find({ tenantId: String(tenantId) }).sort({ name: 1 }).toArray();
+  return rows.map(withStock);
+}
+async function GetIngredientById(id, tenantId) {
+  const filter = oidFilter(id, tenantId);
+  if (!filter) return null;
+  return withStock(await dbConnection.collection('ingredients').findOne(filter));
+}
+async function CreateIngredient(data) {
+  const result = await dbConnection.collection('ingredients').insertOne(data);
+  await touchSync(data.tenantId, 'inventory');
+  return withStock(await dbConnection.collection('ingredients').findOne({ _id: result.insertedId }));
+}
+async function UpdateIngredient(id, data, tenantId) {
+  const filter = oidFilter(id, tenantId);
+  if (!filter) return null;
+  const clean = { ...data };
+  delete clean.id; delete clean._id; delete clean.tenantId; delete clean.stock;
+  await dbConnection.collection('ingredients').updateOne(filter, { $set: clean });
+  await touchSync(tenantId, 'inventory');
+  return GetIngredientById(id, tenantId);
+}
+async function DeleteIngredient(id, tenantId) {
+  const filter = oidFilter(id, tenantId);
+  if (!filter) return { deletedCount: 0 };
+  const result = await dbConnection.collection('ingredients').deleteOne(filter);
+  if (result.deletedCount) await touchSync(tenantId, 'inventory');
+  return result;
+}
+// ¿En cuántos platillos entra este ingrediente (en la receta o como extra)?
+async function CountFoodsUsingIngredient(id, tenantId) {
+  const ingredientId = String(id);
+  return dbConnection.collection('foods').countDocuments({
+    tenantId: String(tenantId),
+    $or: [{ 'recipe.ingredientId': ingredientId }, { 'extras.ingredientId': ingredientId }],
+  });
+}
+
+async function logMovement(tenantId, ingredient, delta, stockAfter, meta = {}) {
+  await dbConnection.collection('stock_movements').insertOne({
+    tenantId: String(tenantId),
+    ingredientId: String(ingredient._id),
+    ingredientName: ingredient.name,
+    unit: ingredient.unit,
+    type: meta.type,
+    delta: stockRound(delta),
+    stockAfter: stockRound(stockAfter),
+    orderId: meta.orderId || null,
+    note: meta.note || '',
+    by: meta.by || null,
+    at: new Date(),
+  });
+}
+
+/**
+ * Suma (o resta, si delta es negativo) existencias de forma atómica y deja registro del movimiento.
+ * El stock PUEDE quedar en negativo: una venta nunca se bloquea por un conteo desactualizado.
+ */
+async function AdjustStock(tenantId, ingredientId, delta, meta = {}) {
+  if (!ObjectId.isValid(ingredientId)) return null;
+  const doc = await dbConnection.collection('ingredients').findOneAndUpdate(
+    { _id: new ObjectId(ingredientId), tenantId: String(tenantId) },
+    { $inc: { stock: stockRound(delta) }, $set: { updatedAt: new Date() } },
+    { returnDocument: 'after' }
+  );
+  if (!doc) return null;
+  await logMovement(tenantId, doc, delta, doc.stock, meta);
+  await touchSync(tenantId, 'inventory');
+  return withStock(doc);
+}
+
+/** Fija la existencia contada (inventario físico). El movimiento registra la diferencia real. */
+async function SetStock(tenantId, ingredientId, counted, meta = {}) {
+  if (!ObjectId.isValid(ingredientId)) return null;
+  const before = await dbConnection.collection('ingredients').findOneAndUpdate(
+    { _id: new ObjectId(ingredientId), tenantId: String(tenantId) },
+    { $set: { stock: stockRound(counted), updatedAt: new Date() } },
+    { returnDocument: 'before' }
+  );
+  if (!before) return null;
+  await logMovement(tenantId, before, stockRound(counted) - stockRound(before.stock), counted, { ...meta, type: 'adjust' });
+  await touchSync(tenantId, 'inventory');
+  return withStock({ ...before, stock: counted });
+}
+
+async function GetStockMovements(tenantId, { ingredientId, limit = 50 } = {}) {
+  const filter = { tenantId: String(tenantId), ...(ingredientId ? { ingredientId: String(ingredientId) } : {}) };
+  const rows = await dbConnection.collection('stock_movements').find(filter).sort({ at: -1 }).limit(limit).toArray();
+  return rows.map(withId);
+}
+
 async function GetMenus(tenantId) {
   const filter = tenantId ? { tenantId } : {};
   return (await dbConnection.collection('menus').find(filter).toArray()).map(withId);
@@ -364,7 +461,7 @@ async function UpdateFood(id, data, tenantId) {
   const filter = oidFilter(id, tenantId);
   if (!filter) return null;
   const clean = { ...data };
-  delete clean.id; delete clean._id;
+  delete clean.id; delete clean._id; delete clean.tenantId; // un platillo nunca cambia de negocio
   await dbConnection.collection('foods').updateOne(filter, { $set: clean });
   return GetFoodById(id, tenantId);
 }
@@ -517,6 +614,8 @@ module.exports = {
   CreateTenant, GetTenantById, UpdateTenant, ListTenants, CountUsersByTenant, GetTenantByMpPreapprovalId,
   CreateUser, FindUserByEmail, LoginUsuario, FindUserByUsername, UpdateUserById, FindUserByResetToken,
   touchSync, GetSyncVersions,
+  GetIngredients, GetIngredientById, CreateIngredient, UpdateIngredient, DeleteIngredient, CountFoodsUsingIngredient,
+  AdjustStock, SetStock, GetStockMovements,
   GetUsersByTenant, GetUserByIdAndTenant, CountUsersByRole, DeleteUserByIdAndTenant,
   AddMesa, UpdateStatusMesa, Getmesas, GetMesaFreeWaiter, GetMesaById, DeleteMesa, CloseMesas, GetNextMesaNumero,
   AddWaiter, GetWaiters, GetWaiterByCellphone, GetWaiterByDisponibility, DeleteWaiter, UpdateWaiter,

@@ -169,6 +169,7 @@ const allMore = [
   { to: "/dashboard", name: "dashboard", label: "Resumen / Dashboard" },
   { to: "/waitlist", name: "waitlist", label: "Lista de espera" },
   { to: "/menu", name: "menu", label: "Menú y productos" },
+  { to: "/inventory", name: "inventory", label: "Inventario" },
   { to: "/team", name: "team", label: "Equipo y roles" },
   { to: "/staff", name: "staff", label: "Personal / Meseros" },
   { to: "/billing", name: "billing", label: "Facturación / Planes" },

@@ -104,6 +104,7 @@ export const SCREENS = [
   { name: "menu", path: "/menu", label: "Pedido", roles: ["admin", "waiter", "cashier"], counterRoles: ["admin"], modes: BOTH },
   { name: "orders", path: "/orders", label: "Caja", roles: ["admin", "cashier"], modes: BOTH },
   { name: "team", path: "/team", label: "Equipo y roles", roles: ["admin"], modes: BOTH },
+  { name: "inventory", path: "/inventory", label: "Inventario", roles: ["admin"], modes: BOTH },
   { name: "billing", path: "/billing", label: "Facturación y planes", roles: ["admin", "cashier"], modes: BOTH },
   { name: "settings", path: "/settings", label: "Configuración", roles: ["admin"], modes: BOTH },
   { name: "setup", path: "/setup", label: "Configuración inicial", roles: ["admin"], modes: BOTH },

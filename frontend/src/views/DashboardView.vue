@@ -80,6 +80,20 @@
           </ul>
         </section>
 
+        <section v-if="lowIngredients.length" class="t-card panel low-stock">
+          <div class="panel-head">
+            <h3>Inventario por revisar</h3>
+            <router-link to="/inventory">Ver todo</router-link>
+          </div>
+          <ul class="low-list">
+            <li v-for="i in lowIngredients.slice(0, 6)" :key="i.id">
+              <span class="low-name">{{ i.name }}</span>
+              <span class="low-q" :class="i.status">{{ i.status === "out" ? "Agotado" : qtyWithUnit(i.stock, i.unit) }}</span>
+            </li>
+          </ul>
+          <p v-if="lowIngredients.length > 6" class="t-empty">y {{ lowIngredients.length - 6 }} más</p>
+        </section>
+
         <section v-if="counter" class="t-card panel top-products">
           <h3>Lo más vendido hoy</h3>
           <p v-if="!topProducts.length" class="t-empty">Aún no hay ventas hoy.</p>
@@ -112,12 +126,18 @@ import AppShell from "../components/AppShell.vue";
 import { apiService } from "../apiService";
 import { labelOf, orderStatusLabel } from "../labels";
 import { isCounterMode } from "../roles";
+import { qtyWithUnit } from "../inventoryUnits";
 
 const counter = computed(() => isCounterMode());
 const tables = ref([]);
 const orders = ref([]);
 const waiters = ref([]);
 const waitlistCount = ref(0);
+const ingredients = ref([]);
+// Lo que pide atención primero: agotado, luego por agotarse
+const lowIngredients = computed(() =>
+  ingredients.value.filter((i) => i.status !== "ok").sort((a, b) => (a.status === b.status ? a.name.localeCompare(b.name) : a.status === "out" ? -1 : 1))
+);
 
 const freeTables = computed(() => tables.value.filter((t) => t.disponible).length);
 const occupiedTables = computed(() => tables.value.filter((t) => !t.disponible).length);
@@ -158,20 +178,22 @@ function statusText(s) {
 // silent: recarga automática; si algo falla, se deja lo que ya había en pantalla
 async function load(silent = false) {
   const keep = (fallback) => (silent ? undefined : fallback);
-  const [t, o, w, wl] = await Promise.allSettled([
+  const [t, o, w, wl, inv] = await Promise.allSettled([
     apiService.getTables(),
     apiService.getOrders(),
     apiService.getWaiters(),
     apiService.getWaitlist(),
+    apiService.getIngredients(),
   ]);
   const val = (r, fallback) => (r.status === "fulfilled" ? r.value : keep(fallback));
   const tv = val(t, []); if (tv !== undefined) tables.value = tv || [];
   const ov = val(o, []); if (ov !== undefined) orders.value = ov || [];
   const wv = val(w, []); if (wv !== undefined) waiters.value = wv || [];
   const lv = val(wl, []); if (lv !== undefined) waitlistCount.value = Array.isArray(lv) ? lv.length : 0;
+  const iv = val(inv, []); if (iv !== undefined) ingredients.value = iv || [];
 }
 
-const live = bindLive(["orders", "tables", "waitlist"], () => load(true));
+const live = bindLive(["orders", "tables", "waitlist", "inventory"], () => load(true));
 onMounted(async () => {
   await live.ready;
   await load();
@@ -180,6 +202,11 @@ onUnmounted(() => live.stop());
 </script>
 
 <style scoped>
+.low-list { list-style: none; margin: 0 0 0.5rem; padding: 0; display: grid; gap: 0.45rem; }
+.low-list li { display: flex; justify-content: space-between; gap: 0.8rem; align-items: baseline; }
+.low-name { font-weight: 600; overflow-wrap: anywhere; }
+.low-q { font-size: 0.82rem; font-weight: 800; color: var(--mirestaurante-warning); white-space: nowrap; }
+.low-q.out { color: var(--mirestaurante-danger); }
 .top-list { list-style: none; margin: 0 0 0.8rem; padding: 0; display: grid; gap: 0.5rem; counter-reset: top; }
 .top-list li { display: flex; justify-content: space-between; gap: 0.8rem; align-items: baseline; counter-increment: top; }
 .top-list li::before { content: counter(top); width: 1.5rem; height: 1.5rem; border-radius: 50%; display: inline-grid; place-items: center; background: var(--mirestaurante-primary-soft); color: var(--mirestaurante-primary); font-size: 0.78rem; font-weight: 800; flex-shrink: 0; margin-right: 0.6rem; }

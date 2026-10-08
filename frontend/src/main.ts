@@ -17,6 +17,7 @@ import {
 import "./apiService";
 import { screenRoles, setModeProvider } from "./roles";
 import CounterView from "./views/CounterView.vue";
+import InventoryView from "./views/InventoryView.vue";
 
 import main from "./views/MainComponent.vue";
 import Landing from "./views/LandingView.vue";
@@ -58,6 +59,7 @@ const routes: RouteRecordRaw[] = [
   { path: "/menu", name: "menu", component: MenuView, meta: authMeta(screenRoles("menu")) },
   { path: "/meseros", redirect: "/menu" },
   { path: "/counter", name: "counter", component: CounterView, meta: authMeta(screenRoles("counter")) },
+  { path: "/inventory", name: "inventory", component: InventoryView, meta: authMeta(screenRoles("inventory")) },
   { path: "/team", name: "team", component: TeamView, meta: authMeta(screenRoles("team")) },
   { path: "/staff", name: "staff", component: StaffView, meta: authMeta(screenRoles("staff")) },
   { path: "/orders", name: "orders", component: OrdersView, meta: authMeta(screenRoles("orders")) },
