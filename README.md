@@ -145,34 +145,65 @@ cambiar o eliminar su propia cuenta desde ahí. El alta por correo sigue disponi
 `frontend/src/roles.js`: el menú, la protección de rutas y la pantalla de inicio salen de ahí. Los endpoints del
 backend se protegen aparte con `requireRoles(...)` en cada router.
 
-| Pantalla | Ruta | Administrador | Mesero | Cocina | Caja | Anfitrión | Plataforma |
-|---|---|:-:|:-:|:-:|:-:|:-:|:-:|
-| Resumen | `/dashboard` | ✓ |  |  |  |  |  |
-| Mesas | `/main` | ✓ | ✓ |  | ✓ | ✓ |  |
-| Pedido | `/menu` | ✓ | ✓ |  | ✓ |  |  |
-| Cocina | `/kitchen` | ✓ | ✓ | ✓ | ✓ |  |  |
-| Caja | `/orders` | ✓ |  |  | ✓ |  |  |
-| Lista de espera | `/waitlist` | ✓ |  |  |  | ✓ |  |
-| Meseros | `/staff` | ✓ |  |  |  |  |  |
-| Equipo y roles | `/team` | ✓ |  |  |  |  |  |
-| Facturación y planes | `/billing` | ✓ |  |  | ✓ |  |  |
-| Configuración | `/settings` | ✓ |  |  |  |  |  |
-| Cuenta | `/print/order/:id` | ✓ | ✓ | ✓ | ✓ |  |  |
-| Cierre de caja | `/print/cash/:id` | ✓ |  |  | ✓ |  |  |
-| Plataforma | `/platform` |  |  |  |  |  | ✓ |
+| Pantalla | Ruta | Modo | Administrador | Mesero | Cocina | Caja | Anfitrión | Plataforma |
+|---|---|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| Resumen | `/dashboard` | Ambos | ✓ |  |  |  |  |  |
+| Mostrador | `/counter` | Solo café | café |  |  | café |  |  |
+| Mesas | `/main` | Solo salón | salón | salón |  | salón | salón |  |
+| Cocina | `/kitchen` | Solo salón | salón | salón | salón | salón |  |  |
+| Lista de espera | `/waitlist` | Solo salón | salón |  |  |  | salón |  |
+| Meseros | `/staff` | Solo salón | salón |  |  |  |  |  |
+| Pedido | `/menu` | Ambos | ✓ | salón |  | salón |  |  |
+| Caja | `/orders` | Ambos | ✓ |  |  | ✓ |  |  |
+| Equipo y roles | `/team` | Ambos | ✓ |  |  |  |  |  |
+| Facturación y planes | `/billing` | Ambos | ✓ |  |  | ✓ |  |  |
+| Configuración | `/settings` | Ambos | ✓ |  |  |  |  |  |
+| Cuenta | `/print/order/:id` | Ambos | ✓ | ✓ | ✓ | ✓ |  |  |
+| Cierre de caja | `/print/cash/:id` | Ambos | ✓ |  |  | ✓ |  |  |
+| Plataforma | `/platform` | Ambos |  |  |  |  |  | ✓ |
 
-| Rol | Entra directo a |
-|---|---|
-| Administrador | Mesas (`/main`) |
-| Mesero | Mesas (`/main`) |
-| Cocina | Cocina (`/kitchen`) |
-| Caja | Caja (`/orders`) |
-| Anfitrión | Lista de espera (`/waitlist`) |
+| Rol | Entra directo a (salón) | Entra directo a (café) |
+|---|---|---|
+| Administrador | Mesas (`/main`) | Mostrador (`/counter`) |
+| Mesero | Mesas (`/main`) | — (no existe en café) |
+| Cocina | Cocina (`/kitchen`) | — (no existe en café) |
+| Caja | Caja (`/orders`) | Mostrador (`/counter`) |
+| Anfitrión | Lista de espera (`/waitlist`) | — (no existe en café) |
+
+"✓" = en ambos modos; "salón" / "café" = solo en ese modo.
 
 `hosstess` (nombre anterior del Anfitrión) se migra a `host` automáticamente en la base de datos y en los tokens
 de sesión existentes.
 
 Pruebas del backend: `npm --workspace backend test`.
+
+## Modo Café (mostrador)
+Un negocio de tipo **Café** (se elige en el asistente inicial o en Configuración) opera como **mostrador**: se pide,
+se cobra y se entrega en un solo paso, **sin mesas, cocina, mesero ni anfitrión**, y con un equipo de **hasta 2
+personas** (Administrador y Caja). Los demás tipos de negocio usan el flujo de salón de siempre.
+
+**El flujo, de punta a punta**
+1. **Abrir caja** con el fondo inicial (sin caja abierta no se puede vender).
+2. **Mostrador** (`/counter`): se toca cada producto, se ajustan cantidades, notas ("leche de avena") y, si se
+   quiere, el nombre del cliente y *Aquí / Para llevar*.
+3. **Cobrar**: efectivo (con billetes rápidos y cambio en vivo), tarjeta o transferencia. Muestra el **turno** del
+   día (#1, #2…, se reinicia cada día) para llamar al cliente, y permite imprimir el ticket.
+4. **Caja**: todas las ventas entran al cierre del turno, desglosadas por método de pago.
+5. **Resumen**: ventas del día, tickets, ticket promedio y lo más vendido.
+Si hay dos personas con sesión, lo que vende una se ve en la otra en ≤ ~1.5 s (ver *Tiempo real*).
+
+**Reglas** (todas se hacen cumplir en el servidor, no solo en la pantalla)
+- Una venta de mostrador nace **cobrada y entregada**: no pasa por cocina ni toca mesas.
+- Los **precios salen del menú del negocio**, nunca del cliente; el IVA y el total los calcula el servidor.
+- `POST /orders/counter` acepta un `clientRef`: reintentar o hacer doble clic **no duplica la venta**
+  (índice único por negocio + `clientRef`).
+- Equipo: solo Administrador y Caja, máximo 2 cuentas **contando invitaciones pendientes**. No se puede cambiar un
+  negocio a Café si su equipo no cabe (se explica qué cuentas hay que quitar); volver a restaurante siempre se puede.
+- El administrador edita los productos desde **Menú**; el cajero solo vende.
+
+**Dónde vive en el código:** `backend/models/venueMode.js` y `frontend/src/roles.js` (modos, límites y qué pantallas
+existen en cada modo; un test verifica que coincidan), `backend/controllers/orders.controller.js` (`counterSale`) y
+`frontend/src/views/CounterView.vue`.
 
 ## Tiempo real
 Cocina, mesas, lista de espera, caja, panel y los avisos del mesero se actualizan solos: un cambio hecho en

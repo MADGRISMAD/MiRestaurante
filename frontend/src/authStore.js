@@ -1,5 +1,5 @@
 import { reactive } from "vue";
-import { normalizeRole, roleHome, routeRoles, homeForRole as homeFor } from "./roles";
+import { normalizeRole, roleHome, routeRoles, homeForRole as homeFor, canAccessScreen, currentMode } from "./roles";
 
 const STORAGE_KEY = "mirestaurante_auth";
 
@@ -62,12 +62,11 @@ export function isPlatformAdmin() {
 // La tabla de roles y pantallas vive en ./roles.js
 export { roleHome, routeRoles };
 
+/** ¿Puede la sesión actual entrar a esta pantalla en el modo del negocio (salón o mostrador)? */
 export function canAccessRoute(name) {
-  const allowed = routeRoles[name];
-  if (!allowed) return true;
-  return hasRole(...allowed);
+  return canAccessScreen(name, authStore.role, currentMode());
 }
 
 export function homeForRole(role = authStore.role) {
-  return homeFor(role);
+  return homeFor(role, currentMode());
 }

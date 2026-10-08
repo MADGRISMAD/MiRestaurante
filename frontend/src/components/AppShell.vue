@@ -106,6 +106,7 @@ import { venueStore } from "../venueStore";
 import { themeStore, toggleUiTheme } from "../themeStore";
 import { clearSession, canAccessRoute, hasRole } from "../authStore";
 import { apiService } from "../apiService";
+import { isCounterMode } from "../roles";
 import { liveState as live } from "../live";
 import {
   alertsState,
@@ -152,10 +153,12 @@ const ico = {
   tables: `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="8" width="18" height="3" rx="1"/><path d="M6 11v7M18 11v7M9 14h6"/></svg>`,
   order: `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>`,
   kitchen: `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 4v8a4 4 0 008 0V4M12 16v4M9 20h6"/></svg>`,
+  counter: `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h9v8a4.5 4.5 0 01-9 0V3z"/><path d="M15 5h2.5a2.5 2.5 0 010 5H15M5 21h11"/></svg>`,
   cash: `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>`,
 };
 
 const allDock = [
+  { to: "/counter", name: "counter", label: "Mostrador", icon: ico.counter },
   { to: "/main", name: "main", label: "Mesas", icon: ico.tables },
   { to: "/menu", name: "menu", label: "Pedido", icon: ico.order },
   { to: "/kitchen", name: "kitchen", label: "Cocina", icon: ico.kitchen },
@@ -165,14 +168,23 @@ const allDock = [
 const allMore = [
   { to: "/dashboard", name: "dashboard", label: "Resumen / Dashboard" },
   { to: "/waitlist", name: "waitlist", label: "Lista de espera" },
+  { to: "/menu", name: "menu", label: "Menú y productos" },
   { to: "/team", name: "team", label: "Equipo y roles" },
   { to: "/staff", name: "staff", label: "Personal / Meseros" },
   { to: "/billing", name: "billing", label: "Facturación / Planes" },
   { to: "/settings", name: "settings", label: "Configuración" },
 ];
 
-const dock = computed(() => allDock.filter((i) => canAccessRoute(i.name)));
-const moreItems = computed(() => allMore.filter((i) => canAccessRoute(i.name)));
+// En café "Pedido" no existe (se vende en el Mostrador): esa pantalla es solo el menú del admin
+const dock = computed(() =>
+  allDock
+    .filter((i) => canAccessRoute(i.name))
+    .map((i) => (i.name === "menu" && isCounterMode() ? { ...i, label: "Menú" } : i))
+);
+// "Más" muestra lo que no está ya en la barra de abajo (p. ej. el menú, que en café solo edita el admin)
+const moreItems = computed(() =>
+  allMore.filter((i) => canAccessRoute(i.name) && !dock.value.some((d) => d.name === i.name))
+);
 
 const isWaiter = computed(() => hasRole("waiter"));
 const askPermission = computed(() => isWaiter.value && alertsState.permission === "default");

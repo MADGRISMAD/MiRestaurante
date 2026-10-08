@@ -5,16 +5,18 @@ import { createVuetify } from "vuetify";
 import * as components from "vuetify/components";
 import * as directives from "vuetify/directives";
 import "./index.css";
-import { fetchVenueSettings, isSetupComplete } from "./venueStore";
+import { fetchVenueSettings, isSetupComplete, venueStore } from "./venueStore";
 import "./themeStore";
 import {
   canAccessRoute,
   clearSession,
   homeForRole,
   isAuthenticated,
+  isPlatformAdmin,
 } from "./authStore";
 import "./apiService";
-import { screenRoles } from "./roles";
+import { screenRoles, setModeProvider } from "./roles";
+import CounterView from "./views/CounterView.vue";
 
 import main from "./views/MainComponent.vue";
 import Landing from "./views/LandingView.vue";
@@ -55,6 +57,7 @@ const routes: RouteRecordRaw[] = [
   { path: "/main", name: "main", component: main, meta: authMeta(screenRoles("main")) },
   { path: "/menu", name: "menu", component: MenuView, meta: authMeta(screenRoles("menu")) },
   { path: "/meseros", redirect: "/menu" },
+  { path: "/counter", name: "counter", component: CounterView, meta: authMeta(screenRoles("counter")) },
   { path: "/team", name: "team", component: TeamView, meta: authMeta(screenRoles("team")) },
   { path: "/staff", name: "staff", component: StaffView, meta: authMeta(screenRoles("staff")) },
   { path: "/orders", name: "orders", component: OrdersView, meta: authMeta(screenRoles("orders")) },
@@ -97,6 +100,8 @@ const publicNames = new Set(["landing", "login", "register", "forgot", "reset", 
 router.beforeEach(async (to) => {
   if (publicNames.has(String(to.name))) {
     if (isAuthenticated() && (to.name === "login" || to.name === "register")) {
+      // La pantalla de inicio depende del modo del negocio (salón o mostrador): primero los ajustes
+      if (!venueStore.ready && !isPlatformAdmin()) await fetchVenueSettings();
       return { name: homeForRole() };
     }
     return true;
@@ -104,6 +109,12 @@ router.beforeEach(async (to) => {
 
   if (to.meta.requiresAuth && !isAuthenticated()) {
     return { name: "login" };
+  }
+
+  // El modo (salón o mostrador) sale de los ajustes del negocio: en un dispositivo nuevo hay que
+  // traerlos ANTES de decidir a qué pantallas puede entrar esta sesión.
+  if (to.meta.roles && !venueStore.ready && !isPlatformAdmin()) {
+    await fetchVenueSettings();
   }
 
   if (to.meta.roles && !canAccessRoute(String(to.name))) {
@@ -123,6 +134,9 @@ router.beforeEach(async (to) => {
 
   return true;
 });
+
+// El modo de servicio (salón o mostrador) depende del tipo de negocio de los ajustes
+setModeProvider(() => venueStore.businessType);
 
 const vuetify = createVuetify({
   components,

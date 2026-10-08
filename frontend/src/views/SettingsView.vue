@@ -20,6 +20,10 @@
               <option value="other">Otro</option>
             </select>
           </label>
+          <p v-if="form.businessType === 'cafe'" class="hint cafe-note">
+            <strong>Modo Café (mostrador):</strong> se pide, se cobra y se entrega en un solo paso, sin mesas ni cocina.
+            Incluye hasta 2 personas (Administrador y Caja).
+          </p>
           <label>Dirección<input v-model="form.address" /></label>
           <label>Teléfono<input v-model="form.phone" /></label>
           <label>Logo URL<input v-model="form.logoUrl" /></label>
@@ -94,7 +98,8 @@
       <section v-else class="panel">
         <h2>Preferencias</h2>
         <p class="hint">Mesas iniciales de referencia (no crea mesas automáticamente).</p>
-        <label>Mesas iniciales<input v-model.number="form.initialTables" type="number" min="0" max="100" /></label>
+        <label v-if="form.businessType !== 'cafe'">Mesas iniciales<input v-model.number="form.initialTables" type="number" min="0" max="100" /></label>
+        <p v-else class="hint">El modo Café no usa mesas: se vende desde el Mostrador.</p>
         <button type="button" class="btn-primary" @click="saveBrand">Guardar</button>
         <router-link to="/setup" class="link">Volver a ejecutar el wizard de configuración</router-link>
       </section>
@@ -151,8 +156,9 @@ async function saveBrand() {
   try {
     await saveVenueSettings({ ...form });
     message.value = "Configuración guardada.";
-  } catch {
-    message.value = "No se pudo guardar.";
+  } catch (e) {
+    // El servidor puede rechazar el cambio con una razón clara (p. ej. el equipo no cabe en modo Café)
+    message.value = e?.message || "No se pudo guardar.";
   } finally {
     saving.value = false;
   }
@@ -199,6 +205,7 @@ onMounted(loadInvites);
 </script>
 
 <style scoped>
+.cafe-note { grid-column: 1 / -1; margin: 0; padding: 0.7rem 0.9rem; border-radius: 0.8rem; background: var(--mirestaurante-primary-soft); color: var(--mirestaurante-ink); }
 .settings { animation: t-fade-up .45s ease both; }
 .tabs { display:flex; gap:.45rem; margin-bottom:1.1rem; flex-wrap:wrap; }
 .tabs button { border:1px solid var(--mirestaurante-line); background:var(--mirestaurante-panel-elevated); color:var(--mirestaurante-ink); border-radius:999px; padding:.45rem .9rem; cursor:pointer; font-size:.85rem; font-weight:600; }

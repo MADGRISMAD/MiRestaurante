@@ -4,15 +4,36 @@
       <div class="hero-strip">
         <div>
           <h2>Resumen del día</h2>
-          <p>Operación, personal y ventas en un vistazo.</p>
+          <p v-if="counter">Ventas y tickets del mostrador en un vistazo.</p>
+          <p v-else>Operación, personal y ventas en un vistazo.</p>
         </div>
-        <div class="hero-actions">
+        <div v-if="counter" class="hero-actions">
+          <router-link to="/counter" class="t-btn t-btn-primary">Abrir mostrador</router-link>
+          <router-link to="/orders" class="t-btn t-btn-ghost">Caja</router-link>
+        </div>
+        <div v-else class="hero-actions">
           <router-link to="/main" class="t-btn t-btn-primary">Abrir mesas</router-link>
           <router-link to="/menu" class="t-btn t-btn-ghost">Tomar pedido</router-link>
         </div>
       </div>
 
-      <div class="kpi-grid">
+      <!-- Café: sin mesas ni personal en turno; lo que importa es lo vendido -->
+      <div v-if="counter" class="kpi-grid">
+        <div class="kpi accent">
+          <p class="kpi-label">Ventas del día</p>
+          <p class="kpi-value">{{ formatMoney(todaySales) }}</p>
+        </div>
+        <div class="kpi">
+          <p class="kpi-label">Tickets</p>
+          <p class="kpi-value">{{ todayPaid.length }}</p>
+        </div>
+        <div class="kpi">
+          <p class="kpi-label">Ticket promedio</p>
+          <p class="kpi-value">{{ formatMoney(todayPaid.length ? todaySales / todayPaid.length : 0) }}</p>
+        </div>
+      </div>
+
+      <div v-else class="kpi-grid">
         <div class="kpi">
           <p class="kpi-label">Mesas libres</p>
           <p class="kpi-value">{{ freeTables }}</p>
@@ -50,7 +71,7 @@
           <ul v-else class="recent-list">
             <li v-for="o in recentOrders" :key="o.id">
               <div>
-                <strong>{{ o.tableName || "Sin mesa" }}</strong>
+                <strong>{{ o.turno ? `#${o.turno} · ` : "" }}{{ o.tableName || "Sin mesa" }}</strong>
                 <span class="meta">{{ formatTime(o.createdAt) }}</span>
               </div>
               <span class="t-badge" :class="`st-${o.status}`">{{ statusText(o.status) }}</span>
@@ -59,7 +80,20 @@
           </ul>
         </section>
 
-        <section class="t-card panel shortcuts">
+        <section v-if="counter" class="t-card panel top-products">
+          <h3>Lo más vendido hoy</h3>
+          <p v-if="!topProducts.length" class="t-empty">Aún no hay ventas hoy.</p>
+          <ol v-else class="top-list">
+            <li v-for="p in topProducts" :key="p.name">
+              <span class="top-name">{{ p.name }}</span>
+              <span class="top-qty">{{ p.quantity }} {{ p.quantity === 1 ? "vendido" : "vendidos" }}</span>
+            </li>
+          </ol>
+          <router-link to="/menu" class="top-link">Editar menú y productos</router-link>
+          <router-link to="/team">Equipo</router-link>
+        </section>
+
+        <section v-else class="t-card panel shortcuts">
           <h3>Atajos</h3>
           <router-link to="/staff">Gestionar personal</router-link>
           <router-link to="/kitchen">Pantalla de cocina</router-link>
@@ -77,7 +111,9 @@ import { bindLive } from "../live";
 import AppShell from "../components/AppShell.vue";
 import { apiService } from "../apiService";
 import { labelOf, orderStatusLabel } from "../labels";
+import { isCounterMode } from "../roles";
 
+const counter = computed(() => isCounterMode());
 const tables = ref([]);
 const orders = ref([]);
 const waiters = ref([]);
@@ -89,12 +125,22 @@ const activeOrders = computed(() =>
   orders.value.filter((o) => !["served", "cancelled"].includes(o.status) && o.paymentStatus !== "paid").length
 );
 const activeStaff = computed(() => waiters.value.filter((w) => w.status === "active").length);
-const todaySales = computed(() => {
+const todayPaid = computed(() => {
   const start = new Date();
   start.setHours(0, 0, 0, 0);
-  return orders.value
-    .filter((o) => o.paymentStatus === "paid" && new Date(o.paidAt || o.updatedAt || o.createdAt) >= start)
-    .reduce((sum, o) => sum + Number(o.total || 0), 0);
+  return orders.value.filter(
+    (o) => o.paymentStatus === "paid" && new Date(o.paidAt || o.updatedAt || o.createdAt) >= start
+  );
+});
+const todaySales = computed(() => todayPaid.value.reduce((sum, o) => sum + Number(o.total || 0), 0));
+const topProducts = computed(() => {
+  const byName = new Map();
+  for (const o of todayPaid.value) {
+    for (const it of o.items || []) {
+      byName.set(it.name, (byName.get(it.name) || 0) + Number(it.quantity || 0));
+    }
+  }
+  return [...byName].map(([name, quantity]) => ({ name, quantity })).sort((a, b) => b.quantity - a.quantity).slice(0, 5);
 });
 const recentOrders = computed(() => [...orders.value].slice(0, 8));
 
@@ -134,6 +180,12 @@ onUnmounted(() => live.stop());
 </script>
 
 <style scoped>
+.top-list { list-style: none; margin: 0 0 0.8rem; padding: 0; display: grid; gap: 0.5rem; counter-reset: top; }
+.top-list li { display: flex; justify-content: space-between; gap: 0.8rem; align-items: baseline; counter-increment: top; }
+.top-list li::before { content: counter(top); width: 1.5rem; height: 1.5rem; border-radius: 50%; display: inline-grid; place-items: center; background: var(--mirestaurante-primary-soft); color: var(--mirestaurante-primary); font-size: 0.78rem; font-weight: 800; flex-shrink: 0; margin-right: 0.6rem; }
+.top-name { flex: 1; font-weight: 600; overflow-wrap: anywhere; }
+.top-qty { color: var(--mirestaurante-muted); font-size: 0.85rem; white-space: nowrap; }
+.top-link { display: block; margin-top: 0.2rem; }
 .hero-strip {
   display: flex;
   justify-content: space-between;

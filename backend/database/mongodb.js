@@ -37,6 +37,7 @@ async function ensureConnection() {
       dbConnection = connection.db(_dbName);
       await migrateLegacyTenant();
       await migrateLegacyRoles();
+      await ensureIndexes();
       connected = true;
       console.log(`MongoDB connected → ${_dbName}`);
     })().finally(() => {
@@ -44,6 +45,19 @@ async function ensureConnection() {
     });
   }
   await connecting;
+}
+
+// Índices que el código necesita para ser correcto (no solo rápido). Idempotente: si ya existen no hace nada.
+async function ensureIndexes() {
+  try {
+    // Una venta de mostrador no puede registrarse dos veces aunque el cliente reintente o haga doble clic.
+    await dbConnection.collection('orders').createIndex(
+      { tenantId: 1, clientRef: 1 },
+      { unique: true, partialFilterExpression: { clientRef: { $type: 'string' } } }
+    );
+  } catch (err) {
+    console.error('[db] no se pudo crear el índice de orders:', err.message);
+  }
 }
 
 // 'hosstess' (typo) pasó a 'host'; actualiza usuarios e invitaciones existentes.
@@ -426,6 +440,17 @@ async function CreateOrder(data) {
   await touchSync(data.tenantId, 'orders');
   return withId(await dbConnection.collection('orders').findOne({ _id: result.insertedId }));
 }
+async function GetOrderByClientRef(tenantId, clientRef) {
+  if (!tenantId || !clientRef) return null;
+  return withId(await dbConnection.collection('orders').findOne({ tenantId: String(tenantId), clientRef }));
+}
+// Contador atómico (p. ej. el turno del día en el mostrador). Devuelve el número que le tocó.
+async function NextCounter(tenantId, key) {
+  const doc = await dbConnection
+    .collection('counters')
+    .findOneAndUpdate({ _id: `${tenantId}:${key}` }, { $inc: { n: 1 } }, { upsert: true, returnDocument: 'after' });
+  return doc?.n ?? doc?.value?.n;
+}
 async function UpdateOrder(id, data, tenantId) {
   const filter = oidFilter(id, tenantId);
   if (!filter) return null;
@@ -499,7 +524,7 @@ module.exports = {
   GetSettings, CreateSettings, UpdateSettings,
   GetMenus, GetMenuById, CreateMenu, UpdateMenu, DeleteMenu,
   GetFoods, GetFoodById, CreateFood, UpdateFood, DeleteFood,
-  GetOrders, GetOrderById, CreateOrder, UpdateOrder, GetOrdersByCashSession,
+  GetOrders, GetOrderById, CreateOrder, UpdateOrder, GetOrdersByCashSession, GetOrderByClientRef, NextCounter,
   GetInvites, GetInviteByToken, CreateInvite, UpdateInvite, DeleteInvite,
   GetOpenCashSession, GetCashSessionById, CreateCashSession, UpdateCashSession,
 };

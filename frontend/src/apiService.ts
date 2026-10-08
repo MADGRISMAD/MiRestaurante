@@ -102,6 +102,9 @@ export const apiService = {
     return axios.delete(`/menus/${menuId}`).then((r) => r.status === 200);
   },
 
+  counterSale(data: Record<string, unknown>) {
+    return axios.post('/orders/counter', data).then((r) => r.data);
+  },
   getSync() {
     return axios.get('/sync').then((r) => r.data);
   },

@@ -55,22 +55,61 @@ export function normalizeRole(role) {
   return LEGACY_ROLE_ALIASES[role] || role;
 }
 
-/** Una fila por pantalla: nombre de ruta, path, etiqueta y roles con acceso. */
+/**
+ * Modo de servicio. Un café opera como MOSTRADOR (se pide, se cobra y se entrega en un solo paso: sin
+ * mesas, cocina, mesero ni anfitrión) y con un equipo de hasta 2 personas. El resto de negocios usan
+ * el flujo de salón. Espejo de `backend/models/venueMode.js`.
+ */
+export const COUNTER_BUSINESS_TYPES = ["cafe"];
+export const COUNTER_MAX_USERS = 2;
+export const COUNTER_ROLES = ["admin", "cashier"];
+
+let modeProvider = () => "table";
+/** main.ts registra aquí de dónde leer el tipo de negocio (evita un import circular con venueStore). */
+export function setModeProvider(fn) {
+  modeProvider = fn;
+}
+export const modeForBusinessType = (type) => (COUNTER_BUSINESS_TYPES.includes(type) ? "counter" : "table");
+export const currentMode = () => modeForBusinessType(modeProvider());
+export const isCounterMode = () => currentMode() === "counter";
+
+/** Qué ve cada rol en un café (reemplaza a `sees`/`description` en modo mostrador). */
+export const COUNTER_ROLE_COPY = {
+  admin: {
+    description: "Atiende y además controla el negocio: menú, equipo, caja y facturación.",
+    sees: ["Mostrador (vender y cobrar)", "Resumen del día", "Menú y productos", "Equipo, ajustes y facturación"],
+  },
+  cashier: {
+    description: "Vende y cobra en el mostrador, y lleva la caja del día.",
+    sees: ["Mostrador (vender y cobrar)", "Caja y cierre del día", "Impresión de tickets"],
+  },
+};
+
+const BOTH = ["table", "counter"];
+
+/**
+ * Una fila por pantalla: nombre de ruta, path, etiqueta, roles con acceso y modos en que existe.
+ * `counterRoles` (opcional) reemplaza a `roles` en modo mostrador.
+ */
 export const SCREENS = [
-  { name: "dashboard", path: "/dashboard", label: "Resumen", roles: ["admin"] },
-  { name: "main", path: "/main", label: "Mesas", roles: ["admin", "host", "waiter", "cashier"] },
-  { name: "menu", path: "/menu", label: "Pedido", roles: ["admin", "waiter", "cashier"] },
-  { name: "kitchen", path: "/kitchen", label: "Cocina", roles: ["admin", "kitchen", "cashier", "waiter"] },
-  { name: "orders", path: "/orders", label: "Caja", roles: ["admin", "cashier"] },
-  { name: "waitlist", path: "/waitlist", label: "Lista de espera", roles: ["admin", "host"] },
-  { name: "staff", path: "/staff", label: "Meseros", roles: ["admin"] },
-  { name: "team", path: "/team", label: "Equipo y roles", roles: ["admin"] },
-  { name: "billing", path: "/billing", label: "Facturación y planes", roles: ["admin", "cashier"] },
-  { name: "settings", path: "/settings", label: "Configuración", roles: ["admin"] },
-  { name: "setup", path: "/setup", label: "Configuración inicial", roles: ["admin"] },
-  { name: "printOrder", path: "/print/order/:id", label: "Cuenta", roles: ["admin", "cashier", "waiter", "kitchen"] },
-  { name: "printCash", path: "/print/cash/:id", label: "Cierre de caja", roles: ["admin", "cashier"] },
-  { name: "platform", path: "/platform", label: "Plataforma", roles: ["platform_admin"] },
+  { name: "dashboard", path: "/dashboard", label: "Resumen", roles: ["admin"], modes: BOTH },
+  // Solo café: venta rápida de mostrador
+  { name: "counter", path: "/counter", label: "Mostrador", roles: ["admin", "cashier"], modes: ["counter"] },
+  // Solo salón: mesas, cocina, lista de espera y meseros
+  { name: "main", path: "/main", label: "Mesas", roles: ["admin", "host", "waiter", "cashier"], modes: ["table"] },
+  { name: "kitchen", path: "/kitchen", label: "Cocina", roles: ["admin", "kitchen", "cashier", "waiter"], modes: ["table"] },
+  { name: "waitlist", path: "/waitlist", label: "Lista de espera", roles: ["admin", "host"], modes: ["table"] },
+  { name: "staff", path: "/staff", label: "Meseros", roles: ["admin"], modes: ["table"] },
+  // En salón se toma el pedido aquí; en café solo el administrador edita los productos
+  { name: "menu", path: "/menu", label: "Pedido", roles: ["admin", "waiter", "cashier"], counterRoles: ["admin"], modes: BOTH },
+  { name: "orders", path: "/orders", label: "Caja", roles: ["admin", "cashier"], modes: BOTH },
+  { name: "team", path: "/team", label: "Equipo y roles", roles: ["admin"], modes: BOTH },
+  { name: "billing", path: "/billing", label: "Facturación y planes", roles: ["admin", "cashier"], modes: BOTH },
+  { name: "settings", path: "/settings", label: "Configuración", roles: ["admin"], modes: BOTH },
+  { name: "setup", path: "/setup", label: "Configuración inicial", roles: ["admin"], modes: BOTH },
+  { name: "printOrder", path: "/print/order/:id", label: "Cuenta", roles: ["admin", "cashier", "waiter", "kitchen"], modes: BOTH },
+  { name: "printCash", path: "/print/cash/:id", label: "Cierre de caja", roles: ["admin", "cashier"], modes: BOTH },
+  { name: "platform", path: "/platform", label: "Plataforma", roles: ["platform_admin"], modes: BOTH },
 ];
 
 export const roleLabel = Object.fromEntries(
@@ -83,17 +122,33 @@ export const roleHome = Object.fromEntries(
 
 export const routeRoles = Object.fromEntries(SCREENS.map((s) => [s.name, s.roles]));
 
-/** Roles con acceso a una pantalla (para meta.roles de las rutas). */
+/** Roles de una pantalla en un modo (counterRoles reemplaza a roles en modo mostrador). */
+export function rolesFor(screen, mode = "table") {
+  return mode === "counter" && screen.counterRoles ? screen.counterRoles : screen.roles;
+}
+
+/** Roles con acceso a una pantalla en cualquier modo (para meta.roles de las rutas). */
 export function screenRoles(name) {
-  return routeRoles[name] || [];
+  const s = SCREENS.find((x) => x.name === name);
+  return s ? [...new Set([...s.roles, ...(s.counterRoles || [])])] : [];
 }
 
-export function homeForRole(role) {
-  return roleHome[normalizeRole(role)] || "main";
+/** ¿Puede este rol entrar a esta pantalla en este modo? Una pantalla desconocida no se restringe. */
+export function canAccessScreen(name, role, mode = "table") {
+  const s = SCREENS.find((x) => x.name === name);
+  if (!s) return true;
+  return s.modes.includes(mode) && rolesFor(s, mode).includes(normalizeRole(role));
 }
 
-/** Pantallas a las que puede entrar un rol (útil para menús y para documentar). */
-export function screensForRole(role) {
+/** Pantalla de inicio de un rol. En modo mostrador todos entran directo a vender. */
+export function homeForRole(role, mode = "table") {
   const r = normalizeRole(role);
-  return SCREENS.filter((s) => s.roles.includes(r));
+  if (r === "platform_admin") return roleHome[r];
+  if (mode === "counter") return "counter";
+  return roleHome[r] || "main";
+}
+
+/** Pantallas a las que puede entrar un rol en un modo (útil para menús y para documentar). */
+export function screensForRole(role, mode = "table") {
+  return SCREENS.filter((s) => canAccessScreen(s.name, role, mode));
 }

@@ -305,7 +305,7 @@
 </template>
 
 <script>
-import { isAuthenticated, homeForRole } from "../authStore";
+import { isAuthenticated } from "../authStore";
 
 const MENU = [
   ["2× Tacos al pastor", "1× Agua de jamaica"],
@@ -364,7 +364,8 @@ export default {
       scrolled: false,
       year: new Date().getFullYear(),
       logged: isAuthenticated(),
-      home: isAuthenticated() ? homeForRole() : "login",
+      // Con sesión, /login reenvía a la pantalla de inicio correcta (depende del modo del negocio)
+      home: "login",
       now: Date.now(),
       half: 1,
       tickets: [makeTicket("cocina", 412), makeTicket("cocina", 236), makeTicket("nuevo", 38)],

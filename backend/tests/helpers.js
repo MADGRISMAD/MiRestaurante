@@ -7,7 +7,7 @@ const path = require('path');
 const { ObjectId } = require('mongodb');
 
 function createFakeDb() {
-  const state = { sync: {}, users: [], waiters: [], tenants: [{ id: 't1', name: 'T1', billingStatus: 'active', plan: 'basic' }, { id: 't2', name: 'T2', billingStatus: 'active', plan: 'basic' }] };
+  const state = { settings: {}, cash: [], foods: [], orders: [], counters: {}, invites: [], sync: {}, users: [], waiters: [], tenants: [{ id: 't1', name: 'T1', billingStatus: 'active', plan: 'basic' }, { id: 't2', name: 'T2', billingStatus: 'active', plan: 'basic' }] };
   const pub = (u) => { const rest = { ...u }; delete rest.password; delete rest.resetToken; delete rest.resetExpires; return { ...rest, id: String(u._id) }; };
   const impl = {
     ensureConnection: async () => {},
@@ -23,6 +23,25 @@ function createFakeDb() {
     DeleteUserByIdAndTenant: async (id, tenantId) => { const n = state.users.length; state.users = state.users.filter((u) => !(String(u._id) === String(id) && u.tenantId === tenantId)); return { deletedCount: n - state.users.length }; },
     GetWaiterByCellphone: async (c, tenantId) => state.waiters.find((w) => w.cellphone === c && w.tenantId === tenantId) || null,
     AddWaiter: async (w) => { state.waiters.push(w); return { insertedId: new ObjectId() }; },
+    // —— ajustes, caja, menú, pedidos e invitaciones (modo mostrador / café)
+    GetSettings: async (t) => state.settings[t] || null,
+    CreateSettings: async (d) => { state.settings[d.tenantId] = { ...d }; return state.settings[d.tenantId]; },
+    UpdateSettings: async (d, t) => { state.settings[t] = { ...(state.settings[t] || {}), ...d }; return state.settings[t]; },
+    CountUsersByTenant: async (t) => state.users.filter((u) => u.tenantId === t).length,
+    GetOpenCashSession: async (t) => state.cash.find((c) => c.tenantId === t && c.status === 'open') || null,
+    GetFoods: async (t) => state.foods.filter((f) => f.tenantId === t),
+    GetOrderByClientRef: async (t, ref) => { const found = state.orders.find((o) => o.tenantId === t && o.clientRef === ref) || null; if (state.slowLookup) await new Promise((r) => setTimeout(r, 25)); return found; },
+
+    NextCounter: async (t, key) => { const k = `${t}:${key}`; state.counters[k] = (state.counters[k] || 0) + 1; return state.counters[k]; },
+    CreateOrder: async (d) => {
+      // Igual que el índice único real: dos ventas con el mismo clientRef no pueden coexistir.
+      if (d.clientRef && state.orders.some((o) => o.tenantId === d.tenantId && o.clientRef === d.clientRef)) { const e = new Error('E11000 duplicate key'); e.code = 11000; throw e; }
+      const o = { ...d, id: String(new ObjectId()) }; state.orders.push(o); return o;
+    },
+    GetInvites: async (t) => state.invites.filter((i) => i.tenantId === t),
+    CreateInvite: async (d) => { const i = { ...d, id: String(new ObjectId()) }; state.invites.push(i); return i; },
+    GetInviteByToken: async (token) => state.invites.find((i) => i.token === token) || null,
+    UpdateInvite: async (id, data, t) => { const i = state.invites.find((x) => x.id === id && x.tenantId === t); if (!i) return null; Object.assign(i, data); return i; },
     DeleteWaiter: async (c, tenantId) => { state.waiters = state.waiters.filter((w) => !(w.cellphone === c && w.tenantId === tenantId)); return {}; },
   };
   // Cualquier otra función de la base que se use por accidente falla de forma explícita.

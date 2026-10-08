@@ -3,8 +3,20 @@
     <div class="team-page">
       <div class="toolbar">
         <p>Crea las cuentas de tu equipo y elige qué pantallas ve cada persona.</p>
-        <button type="button" class="btn-primary" @click="openCreate">+ Nueva cuenta</button>
+        <button
+          type="button"
+          class="btn-primary"
+          :disabled="full"
+          :title="full ? `El modo Café incluye hasta ${limits.maxUsers} personas` : ''"
+          @click="openCreate"
+        >+ Nueva cuenta</button>
       </div>
+
+      <p v-if="counter" class="banner cafe" role="status">
+        <strong>Modo Café (mostrador):</strong> {{ members.length }} de {{ limits.maxUsers }} personas.
+        <template v-if="full">Para agregar a alguien más, elimina una cuenta.</template>
+        Solo hay Administrador y Caja.
+      </p>
 
       <p v-if="error" class="banner err" role="alert">{{ error }}</p>
       <p v-if="notice" class="banner ok" role="status">{{ notice }}</p>
@@ -155,10 +167,13 @@ import { computed, onMounted, reactive, ref } from "vue";
 import AppShell from "../components/AppShell.vue";
 import { apiService } from "../apiService";
 import { authStore } from "../authStore";
-import { ROLE_DEFS, SCREENS, roleHome, roleLabel } from "../roles";
+import { COUNTER_ROLE_COPY, ROLE_DEFS, SCREENS, homeForRole, roleLabel } from "../roles";
 
 const members = ref([]);
 const roles = ref(ROLE_DEFS);
+const limits = ref({ mode: "table", maxUsers: null, allowedRoles: null });
+const counter = computed(() => limits.value.mode === "counter");
+const full = computed(() => limits.value.maxUsers != null && members.value.length >= limits.value.maxUsers);
 const loading = ref(false);
 const saving = ref(false);
 const error = ref("");
@@ -180,7 +195,8 @@ const loginUrl = computed(() => `${window.location.origin}/login`);
 
 const isMe = (m) => m.username === authStore.username;
 const roleText = (r) => roleLabel[r] || r;
-const homeLabel = (roleId) => SCREENS.find((s) => s.name === roleHome[roleId])?.label || "Mesas";
+const homeLabel = (roleId) =>
+  SCREENS.find((s) => s.name === homeForRole(roleId, limits.value.mode))?.label || "Mesas";
 
 /** Contraseña legible: sin caracteres que se confunden (0/O, 1/l/I). */
 function generatePassword(len = 10) {
@@ -206,7 +222,14 @@ async function load() {
   try {
     const data = await apiService.getTeam();
     members.value = data.members || [];
-    if (data.roles?.length) roles.value = data.roles.map((r) => ({ ...ROLE_DEFS.find((d) => d.id === r.id), ...r }));
+    if (data.limits) limits.value = data.limits;
+    if (data.roles?.length) {
+      roles.value = data.roles.map((r) => ({
+        ...ROLE_DEFS.find((d) => d.id === r.id),
+        ...r,
+        ...(counter.value ? COUNTER_ROLE_COPY[r.id] : {}),
+      }));
+    }
   } catch (e) {
     error.value = message(e, "No se pudo cargar el equipo.");
   } finally {
@@ -215,7 +238,10 @@ async function load() {
 }
 
 function openCreate() {
+  if (full.value) return;
   Object.assign(form, emptyForm());
+  // El primer rol que ofrece el negocio (en un café no existe Mesero)
+  if (!roles.value.some((r) => r.id === form.role)) form.role = roles.value[0]?.id || "cashier";
   formError.value = "";
   showPw.value = false;
   showCreate.value = true;
@@ -313,6 +339,7 @@ onMounted(load);
 
 .banner { margin: 0; padding: .65rem .9rem; border-radius: .7rem; font-size: .9rem; font-weight: 600; }
 .banner.err { background: var(--mirestaurante-danger-soft); color: var(--mirestaurante-danger); }
+.banner.cafe { background: var(--mirestaurante-primary-soft); color: var(--mirestaurante-ink); font-weight: 500; }
 .banner.ok { background: var(--mirestaurante-success-soft); color: var(--mirestaurante-success); }
 
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); gap: 1rem; }

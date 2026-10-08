@@ -1,5 +1,6 @@
 const settingsSchema = require('../models/settings.model');
 const db = require('../database/mongodb');
+const { limitsFor, teamFitError } = require('../models/venueMode');
 
 async function GetSettings(req, res) {
   try {
@@ -23,6 +24,10 @@ async function SaveSettings(req, res) {
     if (error) {
       return res.status(400).send(error.details.map((d) => d.message).join(', '));
     }
+
+    // Cambiar a modo Café con un equipo que no cabe dejaría gente sin pantallas: se pide arreglarlo antes.
+    const fitError = teamFitError(limitsFor(value), await db.GetUsersByTenant(req.tenantId));
+    if (fitError) return res.status(400).send(fitError);
 
     const payload = {
       ...value,

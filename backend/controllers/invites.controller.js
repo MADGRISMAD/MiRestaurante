@@ -5,6 +5,7 @@ const bcrypt = require('../utils/bcrypt.utils');
 const jwtCreator = require('../utils/jwt.utils');
 const { TENANT_ROLES } = require('../models/tenant.model');
 const { normalizeRole } = require('../models/roles');
+const { limitsFor, memberLimitError } = require('../models/venueMode');
 
 async function list(req, res) {
   try {
@@ -25,6 +26,14 @@ async function create(req, res) {
     if (!TENANT_ROLES.includes(role)) {
       return res.status(400).send('Rol inválido');
     }
+
+    const limits = limitsFor(await db.GetSettings(req.tenantId));
+    const now = Date.now();
+    const pending = (await db.GetInvites(req.tenantId)).filter(
+      (i) => i.status === 'pending' && (!i.expiresAt || new Date(i.expiresAt).getTime() > now)
+    ).length;
+    const limitError = memberLimitError(limits, role, (await db.CountUsersByTenant(req.tenantId)) + pending);
+    if (limitError) return res.status(400).send(limitError);
 
     const existingUser = await db.FindUserByEmail(email);
     if (existingUser && existingUser.tenantId === req.tenantId) {
@@ -135,6 +144,13 @@ async function accept(req, res) {
 
     const inviteRole = normalizeRole(invite.role);
     const role = TENANT_ROLES.includes(inviteRole) ? inviteRole : 'waiter';
+    // El negocio pudo pasar a modo Café después de invitar: se vuelve a comprobar al aceptar.
+    const acceptLimitError = memberLimitError(
+      limitsFor(await db.GetSettings(invite.tenantId)),
+      role,
+      await db.CountUsersByTenant(invite.tenantId)
+    );
+    if (acceptLimitError) return res.status(400).send(acceptLimitError);
     const hashed = await bcrypt.hashPassword(password);
     await db.CreateUser({
       name,

@@ -7,9 +7,9 @@
         </router-link>
         <div class="pm-title">
           <p class="kicker">{{ tableId ? 'Pedido para' : mode === 'manage' ? 'Editar menú' : 'Pedido' }}</p>
-          <h1>{{ tableName || 'Sin mesa' }}</h1>
+          <h1>{{ counter ? 'Menú y productos' : tableName || 'Sin mesa' }}</h1>
         </div>
-        <div v-if="isAdmin" class="mode-toggle" role="group" aria-label="Modo">
+        <div v-if="isAdmin && !counter" class="mode-toggle" role="group" aria-label="Modo">
           <button type="button" :aria-pressed="mode === 'pos'" @click="mode = 'pos'">Vender</button>
           <button type="button" :aria-pressed="mode === 'manage'" @click="mode = 'manage'">Editar</button>
         </div>
@@ -120,6 +120,7 @@ import { useRoute } from "vue-router";
 import { apiService } from "../apiService";
 import { store } from "../store";
 import { hasRole } from "../authStore";
+import { isCounterMode } from "../roles";
 
 export default {
   components: { AppShell, LSidebar },
@@ -128,7 +129,9 @@ export default {
     const menus = ref([]);
     const productos = ref([]);
     const selectedMenuId = ref("");
-    const mode = ref("pos");
+    // En café no se pide aquí (se vende en el Mostrador): esta pantalla solo edita los productos
+    const counter = isCounterMode();
+    const mode = ref(counter ? "manage" : "pos");
     const showMenuForm = ref(false);
     const showFoodForm = ref(false);
     const editingFood = ref(null);
@@ -264,6 +267,7 @@ export default {
       tableId,
       tableName,
       isAdmin,
+      counter,
       cartOpen,
       bumps,
       qtyById,

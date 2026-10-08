@@ -26,6 +26,7 @@ import { onMounted, reactive, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { apiService } from "../apiService";
 import { setSession, homeForRole } from "../authStore";
+import { fetchVenueSettings } from "../venueStore";
 
 const route = useRoute();
 const router = useRouter();
@@ -68,6 +69,8 @@ async function accept() {
         username: res.username,
       });
       ok.value = true;
+      // El inicio depende del modo del negocio (café o restaurante): traer sus ajustes antes de decidir
+      await fetchVenueSettings();
       setTimeout(() => router.push({ name: homeForRole(res.role) }), 800);
     } else {
       ok.value = true;

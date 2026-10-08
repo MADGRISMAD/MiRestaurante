@@ -3,6 +3,7 @@ const db = require('../database/mongodb');
 const bcrypt = require('../utils/bcrypt.utils');
 const { TENANT_ROLES } = require('../models/tenant.model');
 const { ROLE_DEFS, normalizeRole } = require('../models/roles');
+const { limitsFor, memberLimitError } = require('../models/venueMode');
 
 const passwordRule = Joi.string().min(8).max(72).required().messages({
   'string.min': 'La contraseña debe tener al menos 8 caracteres',
@@ -73,10 +74,19 @@ async function isLastAdmin(req, target) {
   return (await db.CountUsersByRole(req.tenantId, 'admin')) <= 1;
 }
 
+async function tenantLimits(req) {
+  return limitsFor(await db.GetSettings(req.tenantId));
+}
+
 async function list(req, res) {
   try {
     const users = await db.GetUsersByTenant(req.tenantId);
-    return res.status(200).json({ members: users.map(publicUser), roles: ROLE_DEFS });
+    const limits = await tenantLimits(req);
+    return res.status(200).json({
+      members: users.map(publicUser),
+      roles: ROLE_DEFS.filter((r) => limits.allowedRoles.includes(r.id)),
+      limits,
+    });
   } catch (err) {
     console.error(err);
     return res.status(500).send(err.message || 'Error al listar el equipo');
@@ -87,6 +97,9 @@ async function create(req, res) {
   try {
     const { error, value } = createSchema.validate(req.body || {}, { abortEarly: true });
     if (error) return badRequest(res, error);
+
+    const limitError = memberLimitError(await tenantLimits(req), value.role, await db.CountUsersByTenant(req.tenantId));
+    if (limitError) return res.status(400).send(limitError);
 
     if (await db.FindUserByUsername(value.username)) {
       return res.status(400).send('Ese usuario ya existe, elige otro');
@@ -143,6 +156,10 @@ async function changeRole(req, res) {
     const target = await db.GetUserByIdAndTenant(req.params.id, req.tenantId);
     if (!target) return res.status(404).send('Usuario no encontrado');
     if (isSelf(req, target)) return res.status(400).send('No puedes cambiar tu propio rol');
+    const limits = await tenantLimits(req);
+    if (!limits.allowedRoles.includes(value.role)) {
+      return res.status(400).send(memberLimitError(limits, value.role, 0));
+    }
     if (value.role !== 'admin' && (await isLastAdmin(req, target))) {
       return res.status(400).send('Debe quedar al menos un administrador');
     }

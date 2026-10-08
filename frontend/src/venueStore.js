@@ -81,7 +81,14 @@ export async function saveVenueSettings(payload) {
   try {
     const { data } = await apiClient.post("/settings", next);
     Object.assign(venueStore, { ...next, ...data, ready: true });
-  } catch {
+  } catch (err) {
+    // Si el servidor RECHAZA el cambio (p. ej. pasar a Café con un equipo que no cabe) hay que decirlo:
+    // aplicarlo en local dejaría la pantalla en un modo que el servidor no aceptó.
+    const status = err?.response?.status;
+    if (status && status >= 400 && status < 500) {
+      const data = err.response.data;
+      throw new Error(typeof data === "string" && data ? data : "No se pudo guardar la configuración.");
+    }
     Object.assign(venueStore, { ...next, ready: true });
   }
 

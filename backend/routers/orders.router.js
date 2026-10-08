@@ -15,6 +15,8 @@ router.get(
   orders.getById
 );
 router.post('/', requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier', 'waiter'), orders.create);
+// Venta de mostrador (café): pide + cobra en un paso
+router.post('/counter', requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier'), orders.counterSale);
 router.put(
   '/:id/status',
   requireAuth, requireActiveSubscription,

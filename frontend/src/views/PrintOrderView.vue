@@ -23,7 +23,9 @@
 
         <!-- DATOS DEL SERVICIO -->
         <p>FOLIO.......: {{ shortId(order.id) }}</p>
-        <p>MESA........: {{ (order.tableName || 'SIN MESA').toUpperCase() }}</p>
+        <p v-if="order.turno" class="turno">TURNO.......: #{{ order.turno }}</p>
+        <p v-if="order.source === 'counter'">ATENCION....: MOSTRADOR{{ order.customerName ? ' · ' + order.customerName.toUpperCase() : '' }}</p>
+        <p v-else>MESA........: {{ (order.tableName || 'SIN MESA').toUpperCase() }}</p>
         <p>SERVICIO....: {{ modalityText(order.modality).toUpperCase() }}</p>
         <p>APERTURA....: {{ formatDate(order.createdAt) }}</p>
         <p v-if="mode !== 'kitchen' && order.paidAt">
@@ -86,14 +88,16 @@
           </div>
           <p class="sep">================================</p>
 
-          <!-- PROPINA SUGERIDA -->
-          <p class="center section">PROPINA SUGERIDA</p>
-          <div class="row"><span>10%</span><span>$ {{ moneyPlain(order.total * 0.1) }}</span></div>
-          <div class="row"><span>15%</span><span>$ {{ moneyPlain(order.total * 0.15) }}</span></div>
-          <div class="row"><span>20%</span><span>$ {{ moneyPlain(order.total * 0.2) }}</span></div>
-          <p class="muted center tip-line">Propina: $ ______</p>
+          <!-- PROPINA SUGERIDA (no en ventas de mostrador: ya se pagaron en el momento) -->
+          <template v-if="order.source !== 'counter'">
+            <p class="center section">PROPINA SUGERIDA</p>
+            <div class="row"><span>10%</span><span>$ {{ moneyPlain(order.total * 0.1) }}</span></div>
+            <div class="row"><span>15%</span><span>$ {{ moneyPlain(order.total * 0.15) }}</span></div>
+            <div class="row"><span>20%</span><span>$ {{ moneyPlain(order.total * 0.2) }}</span></div>
+            <p class="muted center tip-line">Propina: $ ______</p>
 
-          <p class="sep">--------------------------------</p>
+            <p class="sep">--------------------------------</p>
+          </template>
 
           <!-- PAGO -->
           <template v-if="order.paymentStatus === 'paid'">
@@ -102,6 +106,10 @@
               <span>{{ payMethodLabel(order.paymentMethod) }}</span>
               <span>$ {{ moneyPlain(order.total) }}</span>
             </div>
+            <template v-if="order.paymentMethod === 'cash' && order.amountReceived != null">
+              <div class="row"><span>RECIBIDO</span><span>$ {{ moneyPlain(order.amountReceived) }}</span></div>
+              <div class="row"><span>CAMBIO</span><span>$ {{ moneyPlain(order.change) }}</span></div>
+            </template>
             <p class="center paid">** PAGADO **</p>
           </template>
           <template v-else>

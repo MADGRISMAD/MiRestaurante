@@ -1,6 +1,24 @@
 const db = require('../database/mongodb');
 const { normalizeOrder, orderStatuses, paymentMethods } = require('../models/order.model');
 
+const round2 = (n) => Number(Number(n).toFixed(2));
+const MAX_LINES = 50;
+const MAX_QTY = 99;
+
+// Día natural en la zona horaria del negocio (el turno del mostrador se reinicia cada día).
+function dayKey(timezone) {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone || 'America/Mexico_City',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
+}
+
 async function list(req, res) {
   try {
     return res.status(200).json(await db.GetOrders(req.tenantId));
@@ -85,6 +103,102 @@ async function updateStatus(req, res) {
   }
 }
 
+/**
+ * Venta de mostrador (café): pide, cobra y entrega en un solo paso, sin mesa ni cocina.
+ * - Los precios salen del menú del negocio, no del cliente.
+ * - Exige caja abierta y entra en el cierre de esa caja.
+ * - `clientRef` evita ventas duplicadas por doble clic o reintento de red.
+ */
+async function counterSale(req, res) {
+  try {
+    const body = req.body || {};
+    const method = body.paymentMethod || 'cash';
+    if (!paymentMethods.includes(method)) return res.status(400).send('Método de pago inválido');
+
+    const session = await db.GetOpenCashSession(req.tenantId);
+    if (!session) return res.status(400).send('Abre la caja antes de vender');
+
+    const clientRef = typeof body.clientRef === 'string' && body.clientRef ? body.clientRef.slice(0, 64) : null;
+    if (clientRef) {
+      const duplicate = await db.GetOrderByClientRef(req.tenantId, clientRef);
+      if (duplicate) return res.status(200).json(duplicate);
+    }
+
+    const lines = Array.isArray(body.items) ? body.items : [];
+    if (!lines.length) return res.status(400).send('Agrega al menos un producto');
+    if (lines.length > MAX_LINES) return res.status(400).send('Demasiados productos en una venta');
+
+    const foods = new Map((await db.GetFoods(req.tenantId)).map((f) => [String(f.id), f]));
+    const items = [];
+    for (const line of lines) {
+      const quantity = Number(line.quantity);
+      if (!Number.isInteger(quantity) || quantity < 1 || quantity > MAX_QTY) {
+        return res.status(400).send('Cantidad inválida');
+      }
+      const food = foods.get(String(line.foodId));
+      if (!food) return res.status(400).send('Un producto ya no existe en el menú. Actualiza la pantalla.');
+      items.push({
+        foodId: food.id,
+        name: food.name,
+        price: Number(food.price) || 0,
+        quantity,
+        notes: String(line.notes || '').trim().slice(0, 80),
+      });
+    }
+
+    // normalizeOrder calcula subtotal, IVA y total; no hay costo de envío en mostrador.
+    const payload = normalizeOrder({ items, modality: 'dine-in' });
+    const customerName = String(body.customerName || '').trim().slice(0, 40);
+    let received = null;
+    if (method === 'cash') {
+      received = body.amountReceived == null || body.amountReceived === '' ? payload.total : Number(body.amountReceived);
+      if (!Number.isFinite(received) || received < payload.total) {
+        return res.status(400).send('El efectivo recibido no cubre el total');
+      }
+    }
+
+    const settings = await db.GetSettings(req.tenantId);
+    const now = new Date();
+    Object.assign(payload, {
+      tenantId: req.tenantId,
+      source: 'counter',
+      modality: body.takeaway ? 'takeaway' : 'dine-in',
+      tableId: null,
+      customerName,
+      tableName: customerName ? `Mostrador · ${customerName}` : 'Mostrador',
+      status: 'served',
+      paymentStatus: 'paid',
+      paymentMethod: method,
+      paidAt: now,
+      cashSessionId: session.id,
+      createdBy: req.user?.username || null,
+      turno: await db.NextCounter(req.tenantId, `turno-${dayKey(settings?.timezone)}`),
+      createdAt: now,
+      updatedAt: now,
+    });
+    if (clientRef) payload.clientRef = clientRef;
+    if (received != null) {
+      payload.amountReceived = round2(received);
+      payload.change = round2(received - payload.total);
+    }
+
+    try {
+      const created = await db.CreateOrder(payload);
+      return res.status(201).json(created);
+    } catch (err) {
+      // Dos peticiones iguales a la vez: la segunda choca con el índice único y devuelve la primera.
+      if (err?.code === 11000 && clientRef) {
+        const existing = await db.GetOrderByClientRef(req.tenantId, clientRef);
+        if (existing) return res.status(200).json(existing);
+      }
+      throw err;
+    }
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send(err.message || 'Error al registrar la venta');
+  }
+}
+
 async function pay(req, res) {
   try {
     const method = req.body?.paymentMethod || 'cash';
@@ -135,4 +249,4 @@ async function pay(req, res) {
   }
 }
 
-module.exports = { list, getById, create, updateStatus, pay };
+module.exports = { list, getById, create, updateStatus, pay, counterSale };

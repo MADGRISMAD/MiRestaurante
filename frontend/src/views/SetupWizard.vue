@@ -51,6 +51,11 @@
           </select>
         </label>
 
+        <p v-if="isCafe" class="cafe-note">
+          <strong>Modo Café (mostrador).</strong> Se pide, se cobra y se entrega en un solo paso, sin mesas, cocina ni
+          meseros. Incluye hasta 2 personas: Administrador y Caja.
+        </p>
+
         <label class="field">
           <span>Dirección <em>(opcional)</em></span>
           <input v-model="form.address" type="text" maxlength="200" placeholder="Calle, colonia, ciudad" />
@@ -106,7 +111,7 @@
           </select>
         </label>
 
-        <label class="field">
+        <label v-if="!isCafe" class="field">
           <span>Mesas iniciales (referencia)</span>
           <input v-model.number="form.initialTables" type="number" min="0" max="100" />
         </label>
@@ -117,7 +122,8 @@
             <div><dt>Negocio</dt><dd>{{ form.businessName || "—" }}</dd></div>
             <div><dt>Tipo</dt><dd>{{ typeLabel }}</dd></div>
             <div><dt>Dirección</dt><dd>{{ form.address || "Sin definir" }}</dd></div>
-            <div><dt>Mesas</dt><dd>{{ form.initialTables }}</dd></div>
+            <div v-if="!isCafe"><dt>Mesas</dt><dd>{{ form.initialTables }}</dd></div>
+            <div v-else><dt>Modo</dt><dd>Mostrador</dd></div>
           </dl>
         </div>
 
@@ -156,9 +162,12 @@
 import { computed, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { saveVenueSettings, venueStore } from "../venueStore";
+import { homeForRole } from "../authStore";
+import { modeForBusinessType } from "../roles";
 
 const router = useRouter();
 const step = ref(1);
+const isCafe = computed(() => modeForBusinessType(form.businessType) === "counter");
 const saving = ref(false);
 const error = ref("");
 
@@ -231,9 +240,9 @@ async function finish() {
   error.value = "";
   try {
     await saveVenueSettings({ ...form });
-    router.push("/main");
+    router.push({ name: homeForRole() });
   } catch (e) {
-    error.value = "No se pudo guardar la configuración. Intenta de nuevo.";
+    error.value = e?.message || "No se pudo guardar la configuración. Intenta de nuevo.";
   } finally {
     saving.value = false;
   }
@@ -241,6 +250,7 @@ async function finish() {
 </script>
 
 <style scoped>
+.cafe-note { margin: 0; padding: 0.75rem 0.9rem; border-radius: 0.8rem; background: var(--mirestaurante-primary-soft); color: var(--mirestaurante-ink); font-size: 0.9rem; line-height: 1.45; }
 .setup-shell {
   --primary: var(--mirestaurante-primary);
   --accent: #9a7b52;
